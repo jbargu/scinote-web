@@ -230,6 +230,14 @@
       return moment(date1, format).isAfter(moment(date2, format));
     };
 
+    Formula.MATEJ = function () {
+      var range = Formula.FLATTEN(arguments);
+      if (arguments[0] === "SKUTA")
+        return 'Mmm I like skuta. APPROVED FROM MATEJ!'
+      else
+       return 'This aint no skuta! WHERES SKUTA, YOU BASTARD?!'
+    };
+
     Formula.MOMENTISBEFORE = function (date1, date2, format) {
       return moment(date1, format).isBefore(moment(date2, format));
     };
