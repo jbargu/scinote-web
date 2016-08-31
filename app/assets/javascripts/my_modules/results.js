@@ -12,7 +12,32 @@ function initHandsOnTables(root) {
       rowHeaders: true,
       colHeaders: true,
       fillHandle: false,
+      copyPaste: true,
       formulas: true,
+      contextMenu: {
+        callback: function(key, options) {
+          console.log(this.getSelected())
+          if (key === 'bold') {
+            for (var i = this.getSelected()[0]; i <= this.getSelected()[2]; i++) {
+              for (var k = this.getSelected()[1]; k <= this.getSelected()[3]; k++) {
+                  if (this.getDataAtCell(i, k)
+                    && !this.getDataAtCell(i, k).startsWith('=')) {
+                      this.setDataAtCell(i, k, '<b>' + this.getDataAtCell(i, k) +
+                        '</b>');
+                  }
+              }
+            }
+          }
+        },
+        items: {
+          "bold": {
+            name: 'Make bold'
+          },
+          "normal": {
+            name: 'Make normal'
+          }
+        }
+      },
       cells: function (row, col, prop) {
         var cellProperties = {};
 
@@ -28,6 +53,29 @@ function initHandsOnTables(root) {
     var data = JSON.parse(contents.attr("value"));
     hot.loadData(data.data);
 
+  });
+}
+
+
+function strip_tags(input, allowed) {
+  var tags = /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi,
+  commentsAndPhpTags = /<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi;
+
+  // making sure the allowed arg is a string containing only tags in lowercase (<a><b><c>)
+  allowed = (((allowed || "") + "").toLowerCase().match(/<[a-z][a-z0-9]*>/g) || []).join('');
+
+  return input.replace(commentsAndPhpTags, '').replace(tags, function ($0, $1) {
+  return allowed.indexOf('<' + $1.toLowerCase() + '>') > -1 ? $0 : '';
+  });
+}
+
+function onSubmitExtractTable($form) {
+  $form.submit(function(){
+    var hot = $(".hot").handsontable('getInstance');
+    var contents = $('.hot-contents');
+    var data = JSON.stringify({data: hot.getData()});
+    contents.attr("value", data);
+    return true;
   });
 }
 

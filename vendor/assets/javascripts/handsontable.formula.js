@@ -31,7 +31,6 @@
 
         // get cell data
         var item = instance.plugin.matrix.getItem(cellId);
-
         if (item) {
 
           needUpdate = !! item.needUpdate;
@@ -153,6 +152,7 @@
 
             // update cells
             deps.forEach(function(itemId) {
+              console.log(itemId)
               instance.plugin.matrix.updateItem(itemId, {
                 needUpdate: true
               });
@@ -371,7 +371,7 @@
     };
 
     var textCell = {
-      renderer: Handsontable.renderers.TextRenderer,
+      renderer: safeHtmlRenderer,
       editor: Handsontable.editors.TextEditor
     };
 
@@ -414,6 +414,13 @@
       }
     };
   }
+  function safeHtmlRenderer(instance, td, row, col, prop, value, cellProperties) {
+    var escaped = Handsontable.helper.stringify(value);
+    escaped = strip_tags(escaped, '<em><b><strong><a><big>'); //be sure you only allow certain HTML tags to avoid XSS threats (you should also remove unwanted HTML attributes)
+    td.innerHTML = escaped;
+
+    return td;
+  }
 
   var htFormula = new HandsontableFormula();
 
@@ -424,3 +431,4 @@
   });
 
 })(Handsontable);
+

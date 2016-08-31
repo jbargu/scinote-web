@@ -62,6 +62,10 @@ src="http://handsontable.github.io/handsontable-ruleJS/lib/handsontable/handsont
 	manualColumnResize: true,
 	formulas: true,
 	renderer: safeHtmlRenderer,
+	    beforeChange: function (change, source) {
+	      console.log(change)
+		  console.log(source)
+	    },
 	contextMenu: {
 	  callback: function(key, options) {
 	    console.log(this.getSelected())
@@ -88,6 +92,7 @@ src="http://handsontable.github.io/handsontable-ruleJS/lib/handsontable/handsont
 	  }
 	}
 	});
+
 </script>
 </body>
 </html>
