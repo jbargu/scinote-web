@@ -1,0 +1,98 @@
+<html>
+	<body>
+		<h1> Header </h1>
+		<div id='example1'></div>
+		<div id='example2'></div>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/handsontable/handsontable.full.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/lodash/lodash.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/underscore.string/underscore.string.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/moment/moment.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/numeral/numeral.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/numericjs/numeric.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/js-md5/md5.js"></script>
+<script src="http://handsontable.github.io/handsontable-ruleJS/lib/RuleJS/lib/jstat/jstat.js"></script>
+<script src="formula.js"></script>
+
+<script src="parser.js"></script>
+<script src="ruleJS.js"></script>
+<script
+src="http://handsontable.github.io/handsontable-ruleJS/lib/handsontable/handsontable.formula.js"></script>
+<link rel="stylesheet" media="screen" href="http://handsontable.github.io/handsontable-ruleJS/lib/handsontable/handsontable.formula.css">
+<link rel="stylesheet" media="screen" href="http://handsontable.github.io/handsontable-ruleJS/lib/handsontable/handsontable.full.css">
+<script>
+	var data1 = [
+	['0', "=STDEVP(A1)"],
+	];
+
+	var data2 = [
+	['=$B$2', "Maserati", "Mazda", "Mercedes", "Mini", "=A$1"],
+	[2009, 0, 2941, 4303, 354, 5814],
+	[2010, 5, 2905, 2867, '=SUM(A4,2,3)', '=$B1'],
+	[2011, 4, 2517, 4822, 552, 6127],
+	[2012, '=SUM(A2:A5)', '=SUM(B5,E3)', '=A2/B2', 12, 4151]
+	];
+
+      function safeHtmlRenderer(instance, td, row, col, prop, value, cellProperties) {
+	  var escaped = Handsontable.helper.stringify(value);
+	  escaped = strip_tags(escaped, '<em><b><strong><a><big>'); //be sure you only allow certain HTML tags to avoid XSS threats (you should also remove unwanted HTML attributes)
+	  td.innerHTML = escaped;
+
+	  return td;
+	}
+
+	function strip_tags(input, allowed) {
+	  var tags = /<\/?([a-z][a-z0-9]*)\b[^>]*>/gi,
+	    commentsAndPhpTags = /<!--[\s\S]*?-->|<\?(?:php)?[\s\S]*?\?>/gi;
+
+	  // making sure the allowed arg is a string containing only tags in lowercase (<a><b><c>)
+	  allowed = (((allowed || "") + "").toLowerCase().match(/<[a-z][a-z0-9]*>/g) || []).join('');
+
+	  return input.replace(commentsAndPhpTags, '').replace(tags, function ($0, $1) {
+	    return allowed.indexOf('<' + $1.toLowerCase() + '>') > -1 ? $0 : '';
+	  });
+	}
+	var container1 = $('#example1');
+
+	container1.handsontable({
+	data: data1,
+	minSpareRows: 1,
+	colHeaders: true,
+	rowHeaders: true,
+	manualColumnResize: true,
+	formulas: true,
+	renderer: safeHtmlRenderer,
+	    beforeChange: function (change, source) {
+	      console.log(change)
+		  console.log(source)
+	    },
+	contextMenu: {
+	  callback: function(key, options) {
+	    console.log(this.getSelected())
+	    if (key === 'bold') {
+	      for (var i = this.getSelected()[0]; i <= this.getSelected()[2]; i++) {
+		for (var k = this.getSelected()[1]; k <= this.getSelected()[3];
+		  k++) {
+		    if (this.getDataAtCell(i, k)
+		      && !this.getDataAtCell(i, k).startsWith('=')) {
+			this.setDataAtCell(i, k, '<b>' + this.getDataAtCell(i, k) +
+			  '</b>');
+		    }
+		}
+	      }
+	    }
+	  },
+	  items: {
+	    "bold": {
+	      name: 'Make bold'
+	    },
+	    "normal": {
+	      name: 'Make normal'
+	    }
+	  }
+	}
+	});
+
+</script>
+</body>
+</html>
