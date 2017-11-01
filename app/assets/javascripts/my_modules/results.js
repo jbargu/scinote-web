@@ -12,6 +12,7 @@ function initHandsOnTables(root) {
       rowHeaders: true,
       colHeaders: true,
       fillHandle: false,
+      formulas: true,
       cells: function (row, col, prop) {
         var cellProperties = {};
 
@@ -186,29 +187,6 @@ function expandResult(result) {
   renderTable($(result).find("div.step-result-hot-table"));
 }
 
-
-initHandsOnTables($(document));
-initResultCommentTabAjax();
-expandAllResults();
-initTutorial();
-applyCollapseLinkCallBack();
-
-initCommentOptions("ul.content-comments");
-initEditComments("#results");
-initDeleteComments("#results");
-
-$(function () {
-  $("#results-collapse-btn").click(function () {
-    $('.result .panel-collapse').collapse('hide');
-    $(document).find("span.collapse-result-icon").each(function()  {
-      $(this).addClass("glyphicon-collapse-down");
-      $(this).removeClass("glyphicon-collapse-up");
-    });
-  });
-
-  $("#results-expand-btn").click(expandAllResults);
-});
-
 function renderTable(table) {
   $(table).handsontable("render");
   // Yet another dirty hack to solve HandsOnTable problems
@@ -320,7 +298,8 @@ var ResultTypeEnum = Object.freeze({
   COMMENT: 3
 });
 
-function processResult(ev, resultTypeEnum, forS3) {
+function processResult(ev, resultTypeEnum, editMode, forS3) {
+  forS3 = (typeof forS3 !== 'undefined') ? forS3 : false;
   var $form = $(ev.target.form);
   $form.clearFormErrors();
 
@@ -329,7 +308,7 @@ function processResult(ev, resultTypeEnum, forS3) {
       var $nameInput = $form.find("#result_name");
       var nameValid = textValidator(ev, $nameInput, true);
       var $fileInput = $form.find("#result_asset_attributes_file");
-      var filesValid = filesValidator(ev, $fileInput, FileTypeEnum.FILE);
+      var filesValid = filesValidator(ev, $fileInput, FileTypeEnum.FILE, editMode);
 
       if(nameValid && filesValid) {
         if(forS3) {
@@ -362,6 +341,28 @@ function processResult(ev, resultTypeEnum, forS3) {
 // This checks if the ctarget param exist in the
 // rendered url and opens the comment tab
 $(document).ready(function(){
+  initHandsOnTables($(document));
+  initResultCommentTabAjax();
+  expandAllResults();
+  initTutorial();
+  applyCollapseLinkCallBack();
+
+  initCommentOptions("ul.content-comments");
+  initEditComments("#results");
+  initDeleteComments("#results");
+
+  $(function () {
+    $("#results-collapse-btn").click(function () {
+      $('.result .panel-collapse').collapse('hide');
+      $(document).find("span.collapse-result-icon").each(function()  {
+        $(this).addClass("glyphicon-collapse-down");
+        $(this).removeClass("glyphicon-collapse-up");
+      });
+    });
+
+    $("#results-expand-btn").click(expandAllResults);
+  });
+
   if( getParam('ctarget') ){
     var target = "#"+ getParam('ctarget');
     $(target).find('a.comment-tab-link').click();

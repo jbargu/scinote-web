@@ -39,10 +39,17 @@ class ExperimentsController < ApplicationController
     if @experiment.save
       flash[:success] = t('experiments.create.success_flash',
                           experiment: @experiment.name)
-      redirect_to canvas_experiment_path(@experiment)
+      respond_to do |format|
+        format.json do
+          render json: {}, status: :ok
+        end
+      end
     else
-      flash[:alert] = t('experiments.create.error_flash')
-      redirect_to :back
+      respond_to do |format|
+        format.json do
+          render json: @experiment.errors, status: :unprocessable_entity
+        end
+      end
     end
   end
 
@@ -69,10 +76,17 @@ class ExperimentsController < ApplicationController
       @experiment.touch(:workflowimg_updated_at)
       flash[:success] = t('experiments.update.success_flash',
                           experiment: @experiment.name)
-      redirect_to canvas_experiment_path(@experiment)
+      respond_to do |format|
+        format.json do
+          render json: {}, status: :ok
+        end
+      end
     else
-      flash[:alert] = t('experiments.update.error_flash')
-      redirect_to :back
+      respond_to do |format|
+        format.json do
+          render json: @experiment.errors, status: :unprocessable_entity
+        end
+      end
     end
   end
 
@@ -185,11 +199,19 @@ class ExperimentsController < ApplicationController
 
       flash[:success] = t('experiments.move.success_flash',
                           experiment: @experiment.name)
-      redirect_to canvas_experiment_path(@experiment)
+      respond_to do |format|
+        format.json do
+          render json: { path: canvas_experiment_url(@experiment) }, status: :ok
+        end
+      end
     else
-      flash[:error] = t('experiments.move.error_flash',
-                        experiment: @experiment.name)
-      redirect_to project_path(@experiment.project)
+      respond_to do |format|
+        format.json do
+          render json: { message: t('experiments.move.error_flash',
+                                    experiment: @experiment.name) },
+                                    status: :unprocessable_entity
+        end
+      end
     end
   end
 

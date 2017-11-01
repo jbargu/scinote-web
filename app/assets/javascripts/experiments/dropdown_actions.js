@@ -1,9 +1,10 @@
-
 (function(){
 
   // Create ajax hook on given 'element', which should return modal with 'id' =>
   // show that modal
   function initializeModal(element, id){
+
+    // Initializev new experiment modal listner
     $(element)
     .on("ajax:beforeSend", function(){
       animateSpinner();
@@ -14,6 +15,8 @@
         backdrop: true,
         keyboard: false,
       });
+      validateMoveModal(id);
+      validateExperimentForm($(id));
     })
     .on("ajax:error", function() {
       animateSpinner(null, false);
@@ -45,6 +48,55 @@
     });
   }
 
+  // Validates move action
+  function validateMoveModal(modal){
+    if ( modal.match(/#move-experiment-modal-[0-9]*/) ) {
+      var form = $(modal).find("form");
+      form
+      .on('ajax:success', function(e, data) {
+        animateSpinner(form, true);
+        window.location.replace(data.path);
+      })
+      .on('ajax:error', function(e, error) {
+        var msg = JSON.parse(error.responseText);
+        renderFormError(e,
+                        form.find("#experiment_project_id"),
+                        msg.message.toString(),
+                        true);
+      })
+    }
+  }
+  // Setup front-end validations for experiment form
+  function validateExperimentForm(element){
+    if ( element ) {
+      var form = element.find("form");
+      form
+      .on('ajax:success' , function(){
+        animateSpinner(form, true);
+        location.reload();
+      })
+      .on('ajax:error', function(e, error){
+        var msg = JSON.parse(error.responseText);
+        if ( 'name' in msg ) {
+          renderFormError(e,
+                          element.find("#experiment-name"),
+                          msg.name.toString(),
+                          true);
+        } else if ( 'description' in msg ) {
+          renderFormError(e,
+                          element.find("#experiment-description"),
+                          msg.description.toString(),
+                          true);
+        } else {
+          renderFormError(e,
+                          element.find("#experiment-name"),
+                          error.statusText,
+                          true);
+        }
+      })
+    }
+  }
+
   // Initialize no description edit link
   function initEditNoDescription(){
     var modal = "#edit-experiment-modal-";
@@ -55,7 +107,7 @@
   }
   // Bind modal to new-experiment action
   initializeModal($("#new-experiment"), '#new-experiment-modal');
-  
+
   // Bind modal to big-plus new experiment actions
   initializeModal('.big-plus', '#new-experiment-modal');
 

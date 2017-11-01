@@ -43,11 +43,12 @@ function initializeHandsonTable(el) {
       colHeaders: headers,
       columnSorting: true,
       editor: false,
-      copyPaste: false
+      copyPaste: false,
+      formulas: true
     });
     el.handsontable("getInstance").loadData(data);
     el.handsontable("getInstance").sort(3, order);
-    
+
     // "Hack" to disable user sorting rows by clicking on
     // header elements
     el.handsontable("getInstance")
@@ -61,7 +62,8 @@ function initializeHandsonTable(el) {
       rowHeaders: true,
       colHeaders: true,
       editor: false,
-      copyPaste: false
+      copyPaste: false,
+      formulas: true
     });
     el.handsontable("getInstance").loadData(data);
   }
@@ -1172,16 +1174,30 @@ function showTutorial() {
   return tutorialProjectId == currentProjectId;
 }
 
-/**
- * ACTUAL CODE
- */
-initializeReportElements($(REPORT_CONTENT));
+$(document).ready(function() {
+  /**
+  * ACTUAL CODE
+  */
+  initializeReportElements($(REPORT_CONTENT));
 
-initializeGlobalReportSort();
-initializePrintPopup();
-initializeSaveToPdf();
-initializeSaveReport();
-initializeAddContentsModal();
-initializeSidebarNavigation();
-initializeUnsavedWorkDialog();
-initializeTutorial();
+  initializeGlobalReportSort();
+  initializePrintPopup();
+  initializeSaveToPdf();
+  initializeSaveReport();
+  initializeAddContentsModal();
+  initializeSidebarNavigation();
+  initializeUnsavedWorkDialog();
+  initializeTutorial();
+
+  $(".report-nav-link").each( function(){
+    truncateLongString( $(this), 30);
+  });
+})
+
+$(document).change(function(){
+  setTimeout(function(){
+    $(".report-nav-link").each( function(){
+      truncateLongString( $(this), 30);
+    });
+  }, 1000);
+});
