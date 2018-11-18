@@ -1,0 +1,42 @@
+@import "constants";
+
+.repositories-dropdown-menu {
+  height: auto;
+  max-height: 400px;
+  overflow-x: hidden;
+  text-transform: initial;
+}
+
+.repository-table {
+  margin-top: 20px;
+
+  // Datatables generated name
+  .dataTables_length {
+    display: inline-block;
+  }
+
+  // hack only for firefox
+  @-moz-document url-prefix() {
+    input.form-control[type="file"] {
+      font-size: 13px;
+      height: auto;
+      padding: 3px 12px;
+    }
+  }
+}
+
+.repository-cog {
+  display: inline-block;
+  float: right;
+  padding-left: 4px;
+}
+
+#repository-table_paginate {
+  float: right;
+  text-align: inherit;
+}
+
+.breadcrumb.breadcrumb-repository {
+  background-color: $color-concrete;
+  margin-bottom: 15px;
+}

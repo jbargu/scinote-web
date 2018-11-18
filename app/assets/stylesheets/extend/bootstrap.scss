@@ -1,6 +1,6 @@
 /* Extending Bootstrap */
 
-@import "colors";
+@import 'constants';
 
 /* navbar avatar image */
 .navbar-nav .avatar {
@@ -14,5 +14,104 @@
 
 // Active tab with error should retain error color if clicked on again
 .nav-tabs > li.active.has-error > a {
-  color: $color-apple-blossom;
+  color: $brand-danger;
+}
+
+@media (max-width: 886px) {
+  // line 18, /usr/local/bundle/gems/bootstrap-sass-3.3.6/assets/stylesheets/bootstrap/mixins/_responsive-visibility.scss
+  .hidden-xs-custom {
+    display: none;
+  }
+}
+
+@media (min-width: 1075px) {
+  .col-sm-3-custom {
+    float: left;
+    width: 25%;
+  }
+
+  .col-sm-9-custom {
+    float: left;
+    width: 75%;
+  }
+}
+
+.col-sm-3-custom {
+  min-height: 1px;
+  padding-left: 15px;
+  padding-right: 15px;
+  position: relative;
+}
+
+.col-sm-9-custom {
+  min-height: 1px;
+  padding-left: 15px;
+  padding-right: 15px;
+  position: relative;
+}
+
+.step-comment .col-xs-12 {
+  float: none;
+}
+
+.result-comment .col-xs-12 {
+  float: none;
+}
+
+@media (max-width: 1188px) {
+  .navbar-header {
+    float: none;
+  }
+
+  .navbar-left,
+  .navbar-right {
+    float: none !important;
+  }
+
+  .navbar-toggle {
+    background-color: transparent;
+    background-image: none;
+    border: 1px solid transparent;
+    display: block;
+  }
+
+  .navbar-collapse {
+    border-top: 1px solid transparent;
+  }
+
+  .navbar-fixed-top {
+    border-width: 0 0 1px;
+    top: 0;
+  }
+
+  .navbar-collapse.collapse {
+    display: none !important;
+  }
+
+  .navbar-nav {
+    float: none !important;
+    margin-top: 7.5px;
+  }
+
+  .navbar-nav>li {
+    float: none;
+  }
+
+  .navbar-nav>li>a {
+    padding-bottom: 10px;
+    padding-top: 10px;
+  }
+
+  .collapse.in {
+    display: block !important;
+  }
+
+  .container {
+    width: 100%;
+  }
+}
+
+#samples .dropdown-menu {
+  float: none;
+  position: relative;
 }

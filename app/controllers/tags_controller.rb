@@ -1,14 +1,7 @@
 class TagsController < ApplicationController
-  before_action :load_vars, only: [:new, :create, :update, :destroy]
+  before_action :load_vars, only: [:create, :update, :destroy]
   before_action :load_vars_nested, only: [:update, :destroy]
-  before_action :check_create_permissions, only: [:new, :create]
-  before_action :check_update_permissions, only: [:update]
-  before_action :check_destroy_permissions, only: [:destroy]
-
-  def new
-    @tag = Tag.new
-    session[:return_to] ||= request.referer
-  end
+  before_action :check_manage_permissions, only: %i(create update destroy)
 
   def create
     @tag = Tag.new(tag_params)
@@ -20,7 +13,7 @@ class TagsController < ApplicationController
     end
 
     if @tag.color.blank?
-      @tag.color = TAG_COLORS[0]
+      @tag.color = Constants::TAG_COLORS[0]
     end
 
     if @tag.save
@@ -40,9 +33,13 @@ class TagsController < ApplicationController
           flash[:success] = flash_success
           redirect_to session.delete(:return_to)
         }
-        format.json {
-          redirect_to my_module_tags_edit_path(params[:my_module_id], @tag, format: :json), :status => 303
-        }
+        format.json do
+          redirect_to my_module_tags_edit_path(params[:my_module_id],
+                                               @tag,
+                                               format: :json),
+                      turbolinks: false,
+                      status: 303
+        end
       end
     else
       flash_error = t("tags.create.error_flash")
@@ -51,10 +48,14 @@ class TagsController < ApplicationController
           flash[:error] = flash_error
           render :new
         }
-        format.json {
+        format.json do
           # TODO
-          redirect_to my_module_tags_edit_path(params[:my_module_id], @tag, format: :json), :status => 303
-        }
+          redirect_to my_module_tags_edit_path(params[:my_module_id],
+                                               @tag,
+                                               format: :json),
+                      turbolinks: false,
+                      status: 303
+        end
       end
     end
   end
@@ -64,9 +65,13 @@ class TagsController < ApplicationController
     if @tag.update_attributes(tag_params)
       respond_to do |format|
         format.html
-        format.json {
-          redirect_to my_module_tags_edit_path(params[:my_module_id], @tag, format: :json), :status => 303
-        }
+        format.json do
+          redirect_to my_module_tags_edit_path(params[:my_module_id],
+                                               @tag,
+                                               format: :json),
+                      turbolinks: false,
+                      status: 303
+        end
       end
     else
       respond_to do |format|
@@ -89,9 +94,13 @@ class TagsController < ApplicationController
           flash[:success] = flash_success
           redirect_to root_path
         }
-        format.json {
-          redirect_to my_module_tags_edit_path(params[:my_module_id], @tag, format: :json), :status => 303
-        }
+        format.json do
+          redirect_to my_module_tags_edit_path(params[:my_module_id],
+                                               @tag,
+                                               format: :json),
+                      turbolinks: false,
+                      status: 303
+        end
       end
     else
       flash_error = t(
@@ -103,10 +112,12 @@ class TagsController < ApplicationController
           flash[:error] = flash_error
           redirect_to root_path
         }
-        format.json {
+        format.json do
           # TODO
-          redirect_to my_module_tags_edit_path(format: :json), :status => 303
-        }
+          redirect_to my_module_tags_edit_path(format: :json),
+                      turbolinks: false,
+                      status: 303
+        end
       end
     end
   end
@@ -129,23 +140,8 @@ class TagsController < ApplicationController
     end
   end
 
-  # Currently unimplemented
-  def check_create_permissions
-    unless can_create_new_tag(@project)
-      render_403
-    end
-  end
-
-  def check_update_permissions
-    unless can_edit_tag(@project)
-      render_403
-    end
-  end
-
-  def check_destroy_permissions
-    unless can_delete_tag(@project)
-      render_403
-    end
+  def check_manage_permissions
+    render_403 unless can_manage_tags?(@project)
   end
 
   def tag_params

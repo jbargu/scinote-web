@@ -1,22 +1,28 @@
 class ExperimentsController < ApplicationController
-  include PermissionHelper
-  before_action :set_experiment,
-                except: [:new, :create]
-  before_action :set_project,
-                only: [:new, :create, :samples_index,
-                       :samples, :module_archive, :clone_modal,
-                       :move_modal]
-  before_action :check_view_permissions,
-                only: [:canvas, :module_archive]
-  before_action :check_module_archive_permissions,
-                only: [:module_archive]
-  before_action :check_experiment_clone_permissions,
-                only: [:clone_modal, :clone]
-  before_action :check_experiment_move_permissions,
-                only: [:move_modal, :move]
+  include SampleActions
+  include TeamsHelper
+  include InputSanitizeHelper
+  include ActionView::Helpers::TextHelper
+  include ApplicationHelper
+  include Rails.application.routes.url_helpers
 
-  # except parameter could be used but it is not working.
-  layout :choose_layout
+  before_action :set_experiment,
+                except: %i(new create)
+  before_action :set_project,
+                only: %i(new create samples_index samples module_archive
+                         clone_modal move_modal delete_samples)
+  before_action :load_projects_tree, only: %i(canvas samples module_archive)
+  before_action :check_view_permissions,
+                only: %i(canvas module_archive)
+  before_action :check_manage_permissions, only: :edit
+  before_action :check_archive_permissions, only: :archive
+  before_action :check_clone_permissions, only: %i(clone_modal clone)
+  before_action :check_move_permissions, only: %i(move_modal move)
+
+  layout 'fluid'.freeze
+
+  # Action defined in SampleActions
+  DELETE_SAMPLES = 'Delete'.freeze
 
   def new
     @experiment = Experiment.new
@@ -37,17 +43,40 @@ class ExperimentsController < ApplicationController
     @experiment.last_modified_by = current_user
     @experiment.project = @project
     if @experiment.save
+
+      experiment_annotation_notification
+      Activity.create(
+        type_of: :create_experiment,
+        project: @experiment.project,
+        experiment: @experiment,
+        user: current_user,
+        message: I18n.t(
+          'activities.create_experiment',
+          user: current_user.full_name,
+          experiment: @experiment.name
+        )
+      )
       flash[:success] = t('experiments.create.success_flash',
                           experiment: @experiment.name)
-      redirect_to canvas_experiment_path(@experiment)
+      respond_to do |format|
+        format.json do
+          render json: { path: canvas_experiment_url(@experiment) }, status: :ok
+        end
+      end
     else
-      flash[:alert] = t('experiments.create.error_flash')
-      redirect_to :back
+      respond_to do |format|
+        format.json do
+          render json: @experiment.errors, status: :unprocessable_entity
+        end
+      end
     end
   end
 
   def canvas
     @project = @experiment.project
+    @active_modules = @experiment.active_modules
+                                 .includes(:tags, :inputs, :outputs)
+    current_team_switch(@project.team)
   end
 
   def edit
@@ -63,16 +92,52 @@ class ExperimentsController < ApplicationController
   end
 
   def update
+    render_403 && return unless if experiment_params[:archived] == 'false'
+                                  can_restore_experiment?(@experiment)
+                                else
+                                  can_manage_experiment?(@experiment)
+                                end
+
+    old_text = @experiment.description
     @experiment.update_attributes(experiment_params)
     @experiment.last_modified_by = current_user
+
     if @experiment.save
+
+      experiment_annotation_notification(old_text)
+      Activity.create(
+        type_of: :edit_experiment,
+        project: @experiment.project,
+        experiment: @experiment,
+        user: current_user,
+        message: I18n.t(
+          'activities.edit_experiment',
+          user: current_user.full_name,
+          experiment: @experiment.name
+        )
+      )
       @experiment.touch(:workflowimg_updated_at)
       flash[:success] = t('experiments.update.success_flash',
                           experiment: @experiment.name)
-      redirect_to canvas_experiment_path(@experiment)
+
+      respond_to do |format|
+        format.json do
+          render json: {}, status: :ok
+        end
+        format.html do
+          redirect_to project_path(@experiment.project)
+        end
+      end
     else
       flash[:alert] = t('experiments.update.error_flash')
-      redirect_to :back
+      respond_to do |format|
+        format.json do
+          render json: @experiment.errors, status: :unprocessable_entity
+        end
+        format.html do
+          redirect_back(fallback_location: root_path)
+        end
+      end
     end
   end
 
@@ -81,13 +146,24 @@ class ExperimentsController < ApplicationController
     @experiment.archived_by = current_user
     @experiment.archived_on = DateTime.now
     if @experiment.save
+      Activity.create(
+        type_of: :archive_experiment,
+        project: @experiment.project,
+        experiment: @experiment,
+        user: current_user,
+        message: I18n.t(
+          'activities.archive_experiment',
+          user: current_user.full_name,
+          experiment: @experiment.name
+        )
+      )
       flash[:success] = t('experiments.archive.success_flash',
                           experiment: @experiment.name)
 
       redirect_to project_path(@experiment.project)
     else
       flash[:alert] = t('experiments.archive.error_flash')
-      redirect_to :back
+      redirect_back(fallback_location: root_path)
     end
   end
 
@@ -115,6 +191,8 @@ class ExperimentsController < ApplicationController
       cloned_experiment = @experiment.deep_clone_to_project(current_user,
                                                             project)
       success = cloned_experiment.valid?
+      # Create workflow image
+      cloned_experiment.delay.generate_workflow_img if success
     else
       success = false
     end
@@ -123,6 +201,7 @@ class ExperimentsController < ApplicationController
       Activity.create(
         type_of: :clone_experiment,
         project: project,
+        experiment: @experiment,
         user: current_user,
         message: I18n.t(
           'activities.clone_experiment',
@@ -173,6 +252,7 @@ class ExperimentsController < ApplicationController
       Activity.create(
         type_of: :move_experiment,
         project: project,
+        experiment: @experiment,
         user: current_user,
         message: I18n.t(
           'activities.move_experiment',
@@ -185,11 +265,20 @@ class ExperimentsController < ApplicationController
 
       flash[:success] = t('experiments.move.success_flash',
                           experiment: @experiment.name)
-      redirect_to canvas_experiment_path(@experiment)
+      respond_to do |format|
+        format.json do
+          render json: { path: canvas_experiment_url(@experiment) }, status: :ok
+        end
+      end
     else
-      flash[:error] = t('experiments.move.error_flash',
-                        experiment: @experiment.name)
-      redirect_to project_path(@experiment.project)
+      respond_to do |format|
+        format.json do
+          render json: { message: t('experiments.move.error_flash',
+                                    experiment:
+                                      escape_input(@experiment.name)) },
+                                    status: :unprocessable_entity
+        end
+      end
     end
   end
 
@@ -199,20 +288,21 @@ class ExperimentsController < ApplicationController
   def samples
     @samples_index_link = samples_index_experiment_path(@experiment,
                                                         format: :json)
-    @organization = @experiment.project.organization
+    @team = @experiment.project.team
   end
 
   def samples_index
-    @organization = @experiment.project.organization
+    @team = @experiment.project.team
 
     respond_to do |format|
       format.html
       format.json do
         render json: ::SampleDatatable.new(view_context,
-                                           @organization,
+                                           @team,
                                            nil,
                                            nil,
-                                           @experiment)
+                                           @experiment,
+                                           current_user)
       end
     end
   end
@@ -258,23 +348,44 @@ class ExperimentsController < ApplicationController
     params.require(:experiment).permit(:name, :description, :archived)
   end
 
+  def load_projects_tree
+    # Switch to correct team
+    current_team_switch(@experiment.project.team) unless @experiment.project.nil?
+    @projects_tree = current_user.projects_tree(current_team, nil)
+  end
+
   def check_view_permissions
-    render_403 unless can_view_experiment(@experiment)
+    render_403 unless can_read_experiment?(@experiment)
   end
 
-  def check_module_archive_permissions
-    render_403 unless can_view_experiment_archive(@experiment)
+  def check_manage_permissions
+    render_403 unless can_manage_experiment?(@experiment)
   end
 
-  def check_experiment_clone_permissions
-    render_403 unless can_clone_experiment(@experiment)
+  def check_archive_permissions
+    render_403 unless can_archive_experiment?(@experiment)
   end
 
-  def check_experiment_move_permissions
-    render_403 unless can_move_experiment(@experiment)
+  def check_clone_permissions
+    render_403 unless can_clone_experiment?(@experiment)
   end
 
-  def choose_layout
-    action_name.in?(%w(index archive)) ? 'main' : 'fluid'
+  def check_move_permissions
+    render_403 unless can_move_experiment?(@experiment)
+  end
+
+  def experiment_annotation_notification(old_text = nil)
+    smart_annotation_notification(
+      old_text: old_text,
+      new_text: @experiment.description,
+      title: t('notifications.experiment_annotation_title',
+               experiment: @experiment.name,
+               user: current_user.full_name),
+      message: t('notifications.experiment_annotation_message_html',
+                 project: link_to(@experiment.project.name,
+                                  project_url(@experiment.project)),
+                 experiment: link_to(@experiment.name,
+                                     canvas_experiment_url(@experiment)))
+    )
   end
 end

@@ -1,9 +1,35 @@
-@import "colors";
+@import 'constants';
 @import "mixins";
 
 // Some color definitions
-$color-group-hover: $color-theme-primary;
-$color-module-hover: $color-theme-secondary;
+$color-group-hover: $color-alabaster;
+$color-module-hover: $brand-primary;
+
+#new-project-modal,
+#edit-project-modal,
+#copy-to-repository-modal {
+  .btn-group label.btn-toggle:not(.active) {
+    background-color: $color-white;
+    border-color: $color-silver;
+    color: $color-emperor;
+  }
+}
+
+/* Secondary navigation */
+
+.navbar-nav {
+
+  .btn-group .btn-toggle:not(.active) {
+    background-color: $color-white;
+    border-color: $color-silver;
+    color: $color-emperor;
+  }
+
+  .projects-view-mode-switch {
+    margin: 10px;
+  }
+
+}
 
 /* Canvas index page */
 
@@ -32,8 +58,6 @@ $color-module-hover: $color-theme-secondary;
 }
 
 #canvas-new-module {
-  margin-left: 10px;
-
   .hbtn-default {
     opacity: 1;
     width: 0;
@@ -61,14 +85,13 @@ $color-module-hover: $color-theme-secondary;
 }
 
 #diagram-container {
-  /* for IE10+ touch devices */
-  touch-action: none;
-
-  height: 650px;
-  background: $color-dove-gray;
-  @include box-shadow(0px 0px 2px 1px $color-dove-gray);
-  overflow: hidden;
+  @include box-shadow(0 0 2px 1px $color-silver);
+  background: $color-silver;
   cursor: move;
+  height: 650px;
+  overflow: hidden;
+  // for IE10+ touch devices
+  touch-action: none;
 }
 
 .diagram {
@@ -112,7 +135,7 @@ $color-module-hover: $color-theme-secondary;
     cursor: pointer;
 
     &:hover {
-      color: $color-theme-primary;
+      color: $brand-primary;
       padding: 2px 9px 4px 9px;
     }
   }
@@ -122,7 +145,7 @@ $color-module-hover: $color-theme-secondary;
   border: 2px solid green;
 }
 .jsplumb-drag .title {
-  background-color: $color-theme-primary !important;
+  background-color: $brand-primary !important;
   color: $color-white !important;
 }
 path, ._jsPlumb_endpoint {
@@ -132,7 +155,7 @@ path, ._jsPlumb_endpoint {
   fill: $color-white;
 }
 .ep-hover svg * {
-  fill: $color-theme-primary;
+  fill: $brand-primary;
 }
 
 /* EDIT MODE MODULE */
@@ -140,16 +163,16 @@ path, ._jsPlumb_endpoint {
   opacity: 0.7;
 }
 .module.dragged > .panel-heading {
-  background-color: $color-theme-primary;
+  background-color: $brand-primary;
   color: $color-white;
 }
 .module.collided {
   .overlay {
     display: block;
     z-index: 21;
-    background-color: $color-milano-red;
-    border: 1px solid $color-milano-red;
-    @include box-shadow(0 0 0 1pt $color-milano-red);
+    background-color: $brand-danger;
+    border: 1px solid $brand-danger;
+    @include box-shadow(0 0 0 1pt $brand-danger);
     border-radius: 4px;
     position: absolute;
     top: 0;
@@ -197,14 +220,18 @@ path, ._jsPlumb_endpoint {
 
 /* FULL-ZOOM MODULE */
 .module-large {
-  width: 290px;
   cursor: pointer;
-  position: absolute;
   display: block;
+  position: absolute;
+  width: 300px;
   z-index: 5;
 
   .panel-body .due-date-link {
     color: $color-emperor;
+  }
+
+  .panel-body .due-date-label {
+    margin-left: 30px;
   }
 
   &.expanded {
@@ -212,25 +239,35 @@ path, ._jsPlumb_endpoint {
   }
 
   &.group-hover {
-    @include box-shadow(0px 0px 13px 7px $color-group-hover);
+    @include box-shadow(0 0 0 5px $color-group-hover);
   }
   &.module-hover {
-    @include box-shadow(0px 0px 13px 7px $color-module-hover);
+    @include box-shadow(0 0 0 5px $color-module-hover);
   }
-  &.alert-yellow .panel-body {
-    color: $color-candlelight;
+
+  &.alert-green .panel-body {
+    color: $brand-success;
     font-weight: bold;
 
     .due-date-link {
-      color: $color-candlelight;
+      color: $brand-success;
+    }
+  }
+
+  &.alert-yellow .panel-body {
+    color: $brand-warning;
+    font-weight: bold;
+
+    .due-date-link {
+      color: $brand-warning;
     }
   }
   &.alert-red .panel-body {
-    color: $color-milano-red;
+    color: $brand-danger;
     font-weight: bold;
 
     .due-date-link {
-      color: $color-milano-red;
+      color: $brand-danger;
     }
   }
 }
@@ -244,18 +281,25 @@ path, ._jsPlumb_endpoint {
   z-index: 5;
 
   &.group-hover {
-    @include box-shadow(0px 0px 13px 7px $color-group-hover);
+    @include box-shadow(0 0 0 5px $color-group-hover);
   }
   &.module-hover {
-    @include box-shadow(0px 0px 13px 7px $color-module-hover);
+    @include box-shadow(0 0 0 5px $color-module-hover);
   }
+
+  &.alert-green {
+    border-color: $brand-success;
+    border-radius: 8px;
+    border-width: 4px;
+  }
+
   &.alert-yellow {
-    border-color: $color-candlelight;
+    border-color: $brand-warning;
     border-width: 4px;
     border-radius: 8px;
   }
   &.alert-red {
-    border-color: $color-milano-red;
+    border-color: $brand-danger;
     border-width: 4px;
     border-radius: 8px;
   }
@@ -271,7 +315,7 @@ path, ._jsPlumb_endpoint {
     height: 0px;
     display: inline-block;
 
-    & .glyphicon {
+    & .fas {
       position: inherit;
     }
 
@@ -305,27 +349,32 @@ path, ._jsPlumb_endpoint {
 
   span {
     font-weight: bold;
-    font-size: 16px;
+    font-size: $font-size-large;
     text-transform: uppercase;
     display: block;
     margin-top: 20%;
 
     a {
-      color: $color-mine-shaft;
+      color: $color-emperor;
     }
   }
 
   &.group-hover {
-    @include box-shadow(0px 0px 13px 7px $color-group-hover);
+    @include box-shadow(0 0 0 5px $color-group-hover);
   }
   &.module-hover {
-    @include box-shadow(0px 0px 13px 7px $color-module-hover);
+    @include box-shadow(0 0 0 5px $color-module-hover);
   }
+
+  &.alert-green {
+    border-color: $brand-success;
+  }
+
   &.alert-yellow {
-    border-color: $color-candlelight;
+    border-color: $brand-warning;
   }
   &.alert-red {
-  border-color: $color-milano-red;
+  border-color: $brand-danger;
   }
 }
 
@@ -336,13 +385,19 @@ li.group-hover {
 }
 li.module-hover {
   a {
-    color: $color-theme-primary;
+    color: $brand-primary;
     text-decoration: underline;
   }
 }
 
 /* Edit module tags modal window */
 #manage-module-tags-modal {
+
+  .add-tag-form {
+    display: inline-block;
+    margin-left: 15px;
+  }
+
   .modal-body ul.list-group > li {
     padding-top: 2px;
     padding-bottom: 2px;
@@ -374,7 +429,7 @@ li.module-hover {
           margin-top: 5px;
           font-family: 'Glyphicons Halflings';
           color: $color-white;
-          font-size: 12pt;
+          font-size: $font-size-large;
 
           &:before {
             content: "\e221";
@@ -384,9 +439,9 @@ li.module-hover {
       }
     }
 
-    .glyphicon {
+    .fas {
       color: $color-white;
-      font-size: 12pt;
+      font-size: $font-size-h6;
     }
 
     a.btn-link {
@@ -404,6 +459,7 @@ li.module-hover {
 
   .create-new-tag-btn {
     margin-right: 15px;
+    margin-top: 10px;
   }
 }
 
@@ -415,15 +471,29 @@ li.module-hover {
   margin-bottom: 35px;
   margin-top: 45px;
   max-width: 700px;
+  display: flex;
+  flex-direction: column;
 
-  .experiment-description {
-    margin-top: 20px;
+  .panel-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
   }
 
-  .no-description {
+  .experiment-description {
+    border: 1px solid $color-alto;
+    border-radius: 4px;
+    height: 100px;
+    margin-top: 10px;
+    overflow-x: hidden;
+    overflow-y: scroll;
+    padding: 10px;
+  }
+
+  .experiment-no-description {
     color: $color-alto;
     display: block;
-    font-size: 18px;
+    font-size: $font-size-h4;
     font-weight: bold;
     text-align: center;
 
@@ -468,7 +538,7 @@ li.module-hover {
 }
 
 .big-plus {
-  color: $color-mystic;
+  color: $color-gainsboro;
   display: block;
   font-size: 250px;
   margin: 20px 0;

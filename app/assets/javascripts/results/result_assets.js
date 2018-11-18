@@ -1,74 +1,102 @@
-// New result asset behaviour
-$("#new-result-asset").on("ajax:success", function(e, data) {
-  var $form = $(data.html);
-  $("#results").prepend($form);
+(function(global) {
+  'use strict';
 
-  formAjaxResultAsset($form);
+  global.ResutlAssets = (function() {
+    // New result asset behaviour
+    function initNewResultAsset() {
+      $('#new-result-asset').on('click', function(event) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        var $btn = $(this);
+        $btn.off();
+        animateSpinner(null, true);
 
-  // Cancel button
-  $form.find(".cancel-new").click(function () {
-    $form.remove();
-    toggleResultEditButtons(true);
-  });
+        // get new result form
+        $.ajax({
+          url: $btn.data('href'),
+          method: 'GET',
+          success: function(data) {
+            var $form = $(data.html);
+            animateSpinner(null, false);
+            $('#results').prepend($form);
+            _formAjaxResultAsset($form);
+            Results.initCancelFormButton($form, initNewResultAsset);
+            Results.toggleResultEditButtons(false);
+            dragNdropAssetsInit('results');
+          },
+          error: function(xhr, status, e) {
+            $(this).renderFormErrors('result', xhr.responseJSON, true, e);
+            animateSpinner(null, false);
+            initNewResultAsset();
+          }
+        });
+      });
+    }
 
-  toggleResultEditButtons(false);
+    function applyEditResultAssetCallback() {
+      $('.edit-result-asset').on('ajax:success', function(e, data) {
+        var $result = $(this).closest('.result');
+        var $form = $(data.html);
+        var $prevResult = $result;
+        $result.after($form);
+        $result.remove();
 
-  $("#result_name").focus();
-});
+        _formAjaxResultAsset($form);
 
-$("#new-result-asset").on("ajax:error", function(e, xhr, status, error) {
-  // TODO
-});
+        // Cancel button
+        $form.find('.cancel-edit').click(function () {
+          $form.after($prevResult);
+          $form.remove();
+          applyEditResultAssetCallback();
+          Results.toggleResultEditButtons(true);
+          initPreviewModal();
+        });
 
-// Edit result asset button behaviour
-function applyEditResultAssetCallback() {
-  $(".edit-result-asset").on("ajax:success", function(e, data) {
-    var $result = $(this).closest(".result");
-    var $form = $(data.html);
-    var $prevResult = $result;
-    $result.after($form);
-    $result.remove();
+        Results.toggleResultEditButtons(false);
 
-    formAjaxResultAsset($form);
+        $('#result_name').focus();
+      }).on('ajax:error', function(e, xhr, status, error) {
+        animateSpinner(null, false);
+      });
+    }
 
-    // Cancel button
-    $form.find(".cancel-edit").click(function () {
-      $form.after($prevResult);
-      $form.remove();
-      applyEditResultAssetCallback();
-      toggleResultEditButtons(true);
+    function _formAjaxResultAsset($form) {
+      $form.on('ajax:success', function(e, data) {
+        $form.after(data.html);
+        var $newResult = $form.next();
+        initFormSubmitLinks($newResult);
+        $(this).remove();
+        applyEditResultAssetCallback();
+        Results.applyCollapseLinkCallBack();
+
+        Results.toggleResultEditButtons(true);
+        Results.expandResult($newResult);
+        initPreviewModal();
+        Comments.initialize();
+        initNewResultAsset();
+      }).on('ajax:error', function(e, xhr) {
+        var errors = xhr.responseJSON.errors;
+        var formInput = $form.find('#result_asset_attributes_file');
+        $('[data-status="error"]').remove();
+        $.each(errors, function(key, value) {
+          var message = '<span data-status="error" style="color: #a94442">';
+          message += value + '</span>';
+          formInput.after(message);
+        })
+        animateSpinner(null, false);
+      });
+    }
+
+    var publicAPI = Object.freeze({
+      initNewResultAsset: initNewResultAsset,
+      applyEditResultAssetCallback: applyEditResultAssetCallback
     });
 
-    toggleResultEditButtons(false);
+    return publicAPI;
+  })();
 
-    $("#result_name").focus();
-  });
-
-  $(".edit-result-asset").on("ajax:error", function(e, xhr, status, error) {
-  // TODO
-  });
-}
-
-// Apply ajax callback to form
-function formAjaxResultAsset($form) {
-  $form
-  .on("ajax:success", function(e, data) {
-    $form.after(data.html);
-    var $newResult = $form.next();
-    initFormSubmitLinks($newResult);
-    $(this).remove();
-    applyEditResultAssetCallback();
-    applyCollapseLinkCallBack();
-
-    toggleResultEditButtons(true);
-    initResultCommentTabAjax();
-    expandResult($newResult);
-    $imgs = $newResult.find("img");
-    reloadImages($imgs);
-  })
-  .on("ajax:error", function(e, data) {
-    $form.renderFormErrors("result", data.errors, true, e);
-  });
-}
-
-applyEditResultAssetCallback();
+  ResutlAssets.initNewResultAsset();
+  ResutlAssets.applyEditResultAssetCallback();
+  global.initPreviewModal();
+}(window));

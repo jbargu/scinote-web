@@ -1,6 +1,6 @@
 <% results.each do |mod| %>
   <h5>
-    <span class="glyphicon glyphicon-credit-card"></span>
+    <span class="fas fa-credit-card"></span>
     <%= render partial: "search/results/partials/my_module_text.html.erb", locals: { my_module: mod, query: search_query } %>
   </h5>
 
@@ -28,16 +28,15 @@
     <span>
       <%=t "search.index.project" %>
       <%= render partial: "search/results/partials/project_text.html.erb",
-                 locals: { project: mod.experiment.project } %>
+                 locals: { project: mod.experiment.project, link_to_page: :show } %>
     </span>
     <br>
     <span>
-      <%=t "search.index.organization" %>
-      <%= render partial: "search/results/partials/organization_text.html.erb",
-                 locals: { organization: mod.experiment.project.organization } %>
+      <%=t "search.index.team" %>
+      <%= render partial: "search/results/partials/team_text.html.erb",
+                 locals: { team: mod.experiment.project.team } %>
     </span>
   </p>
 
   <hr>
 <% end %>
-

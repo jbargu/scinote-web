@@ -11,46 +11,38 @@
             <h4><%= tag.name %></h4>
           </div>
             <div class="pull-right">
-              <% if can_edit_tag(@my_module.experiment.project) then %>
-                <%= link_to "", remote: true, class: 'btn btn-link edit-tag-link', title: t("experiments.canvas.modal_manage_tags.edit_tag") do %>
-                  <span class="glyphicon glyphicon-adjust"></span>
-                <% end %>
+              <%= link_to "", remote: true, class: 'btn btn-link edit-tag-link', title: t("experiments.canvas.modal_manage_tags.edit_tag") do %>
+                <span class="fas fa-pencil-alt"></span>
               <% end %>
-              <% if can_remove_tag_from_module(@my_module) then %>
-                <%= link_to my_module_my_module_tag_path(@my_module, mmt, format: :json), method: :delete, remote: true, class: 'btn btn-link remove-tag-link', title: t("experiments.canvas.modal_manage_tags.remove_tag", module: @my_module.name) do %>
-                  <span class="glyphicon glyphicon-remove"></span>
-                <% end %>
+              <%= link_to my_module_my_module_tag_path(@my_module, mmt, format: :json), method: :delete, remote: true, class: 'btn btn-link remove-tag-link', title: t("experiments.canvas.modal_manage_tags.remove_tag", module: @my_module.name) do %>
+                <span class="fas fa-times"></span>
               <% end %>
-              <% if can_delete_tag(@my_module.experiment.project) then %>
-                <%= bootstrap_form_for tag, remote: true, url: project_tag_path(@my_module.experiment.project, tag, format: :json), method: :delete, html: { class: "delete-tag-form"} do |f| %>
-                  <%= hidden_field_tag :my_module_id, @my_module.id %>
-                  <%= f.button class: 'btn btn-link delete-tag-link', title: t("experiments.canvas.modal_manage_tags.delete_tag") do %>
-                    <span class="glyphicon glyphicon-trash"></span>
-                  <% end %>
+              <%= bootstrap_form_for tag, remote: true, url: project_tag_path(@my_module.experiment.project, tag, format: :json), method: :delete, html: { class: "delete-tag-form"} do |f| %>
+                <%= hidden_field_tag :my_module_id, @my_module.id %>
+                <%= f.button class: 'btn btn-link delete-tag-link', title: t("experiments.canvas.modal_manage_tags.delete_tag") do %>
+                  <span class="fas fa-trash-alt"></span>
                 <% end %>
               <% end %>
             </div>
         </div>
 
-        <% if can_edit_tag(@my_module.experiment.project) %>
-          <div class="row tag-edit" style="display: none;">
-            <%= bootstrap_form_for tag, remote: true, url: project_tag_path(@my_module.experiment.project, tag, format: :json), method: :put, html: { class: "edit-tag-form" } do |f| %>
-              <%= hidden_field_tag :my_module_id, @my_module.id %>
-              <div class="col-xs-7">
-                <%= f.text_field :name, hide_label: true %>
-              </div>
-              <div class="pull-right">
-                <%= f.color_picker_select :color, TAG_COLORS, class: "edit-tag-color" %>
-                <%= f.button class: "btn btn-link save-tag-link", title: t("experiments.canvas.modal_manage_tags.save_tag") do %>
-                  <span class="glyphicon glyphicon-ok"></span>
-                <% end %>
-                <%= link_to "", remote: true, class: 'btn btn-link cancel-tag-link', title: t("experiments.canvas.modal_manage_tags.cancel_tag") do %>
-                  <span class="glyphicon glyphicon-remove"></span>
-                <% end %>
-              </div>
-            <% end %>
-          </div>
-        <% end %>
+        <div class="row tag-edit" style="display: none;">
+          <%= bootstrap_form_for tag, remote: true, url: project_tag_path(@my_module.experiment.project, tag, format: :json), method: :put, html: { class: "edit-tag-form" } do |f| %>
+            <%= hidden_field_tag :my_module_id, @my_module.id %>
+            <div class="col-xs-7">
+              <%= f.text_field :name, hide_label: true %>
+            </div>
+            <div class="pull-right">
+              <%= f.color_picker_select :color, Constants::TAG_COLORS, class: "edit-tag-color" %>
+              <%= f.button class: "btn btn-link save-tag-link", title: t("experiments.canvas.modal_manage_tags.save_tag") do %>
+                <span class="fas fa-check"></span>
+              <% end %>
+              <%= link_to "", remote: true, class: 'btn btn-link cancel-tag-link', title: t("experiments.canvas.modal_manage_tags.cancel_tag") do %>
+                <span class="fas fa-times"></span>
+              <% end %>
+            </div>
+          <% end %>
+        </div>
 
       </li>
     <% end %>
@@ -59,31 +51,32 @@
 
 <hr>
 <div class="row">
-  <% if can_add_tag_to_module(@my_module) then %>
     <%= bootstrap_form_for [@my_module, @new_mmt], remote: true, format: :json, html: { class: 'add-tag-form' } do |f| %>
-      <div class="col-xs-6">
+      <div>
         <div class="well well-sm">
-          <%= collection_select(:my_module_tag, :tag_id, @unassigned_tags, :id, :name, {}, { class: 'selectpicker' }) %>
+          <%= collection_select(:my_module_tag,
+                                :tag_id,
+                                @unassigned_tags.collect{ |t| t.name = t.name.truncate(Constants::DROPDOWN_TEXT_MAX_LENGTH, omission: '...'); t },
+                                :id,
+                                :name,
+                                {},
+                                { class: 'selectpicker' }) %>
           <%= f.button class: 'btn btn-primary' do %>
-            <span class="glyphicon glyphicon-plus"></span>
             <span class="hidden-xs"><%= t("experiments.canvas.modal_manage_tags.create") %></span>
           <% end %>
         </div>
       </div>
     <% end %>
-  <% end %>
-  <% if can_create_new_tag(@my_module.experiment.project) then %>
     <div class="pull-right create-new-tag-btn">
       <%= bootstrap_form_for [@my_module.experiment.project, @new_tag], remote: true, format: :json, html: { class: 'add-tag-form' } do |f| %>
         <%= hidden_field_tag :my_module_id, @my_module.id %>
         <%= f.hidden_field :project_id, :value => @my_module.experiment.project.id %>
         <%= f.hidden_field :name, :value => t("tags.create.new_name") %>
-        <%= f.hidden_field :color, :value => TAG_COLORS[0] %>
+        <%= f.hidden_field :color, :value => Constants::TAG_COLORS[0] %>
         <%= f.button class: "btn btn-primary" do %>
-          <span class="glyphicon glyphicon-tag"></span>
+          <span class="fas fa-plus"></span>
           <span class="hidden-xs"><%=t "experiments.canvas.modal_manage_tags.create_new" %></span>
         <% end %>
       <% end %>
     </div>
-  <% end %>
 </div>

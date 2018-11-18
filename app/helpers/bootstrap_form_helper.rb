@@ -48,9 +48,9 @@ module BootstrapFormHelper
       end
       res << "<input type='datetime' class='form-control' name='#{input_name}' id='#{id}' readonly data-ts='#{timestamp}' />"
       if options[:clear] then
-        res << "<span class='input-group-addon' id='#{id}_clear'><span class='glyphicon glyphicon-remove'></span></span></div>"
+        res << "<span class='input-group-addon' id='#{id}_clear'><span class='fas fa-times'></span></span></div>"
       end
-      res << "</div></div></div></div><script type='text/javascript'>$(function () { var dt = $('##{id}'); dt.datetimepicker({ #{jsOpts}ignoreReadonly: true, locale: '#{js_locale}', format: '#{js_format}' }); if (dt.data['ts'] != '') { $('##{id}').data('DateTimePicker').date(moment($('##{id}').data('ts'))); }"
+      res << "</div></div></div></div><script type='text/javascript'>$(function () { var dt = $('##{id}'); dt.datetimepicker({ #{jsOpts}ignoreReadonly: true, locale: '#{js_locale}', format: '#{js_format}' }); if (dt.length > 0 && dt.data['ts'] != '') { $('##{id}').data('DateTimePicker').date(moment($('##{id}').data('ts'))); }"
       if options[:clear] then
         res << "$('##{id}_clear').click(function() { $('##{id}').data('DateTimePicker').clear(); });"
       end
@@ -110,7 +110,7 @@ module BootstrapFormHelper
         active_str = active ? " active" : ""
         checked_str = active ? " checked='checked'" : ""
 
-        res << "<label class='btn btn-primary#{active_str}'>"
+        res << "<label class='btn btn-toggle#{active_str}'>"
         res << "<input type='radio' value='#{val}' name='#{input_name}' id='#{id}_#{val}'#{checked_str}>"
         res << btn_names[val]
         res << "</label>"
@@ -181,8 +181,8 @@ module BootstrapFormHelper
       id = "#{@object_name}_#{name.to_s}"
       input_name = "#{@object_name}[#{name.to_s}]"
 
-      icon_str = '<span class="glyphicon glyphicon-ok" aria-hidden="true"></span>'
-      icon_str_hidden = '<span class="glyphicon glyphicon-ok" aria-hidden="true" style="display: none;"></span>'
+      icon_str = '<span class="fas fa-check" aria-hidden="true"></span>'
+      icon_str_hidden = '<span class="fas fa-check" aria-hidden="true" style="display: none;"></span>'
 
       label = name.to_s.humanize
       if options[:label] then
@@ -236,6 +236,35 @@ module BootstrapFormHelper
       res << "});</script>"
       res << "</div>"
       res.html_safe
+    end
+
+    # Returns smart <textarea> that dynamically resizes depending on the user
+    # input. Also has an option 'single_line: true' to render it as a one-line
+    # (imagine <input type="text">) input field that only grows beyond one line
+    # if inputting a larger text (otherwise, by default it spans 2 lines).
+    #
+    # Other than that, it accepts same options as regular text_area helper.
+    def smart_text_area(name, opts = {})
+      opts[:class] = [opts[:class], 'smart-text-area'].join(' ')
+      if !opts[:rows] && @object
+        opts[:rows] =
+          @object.public_send(name).try(:lines).try(:count)
+      end
+      opts.delete(:rows) if opts[:rows].nil?
+      if opts[:single_line]
+        if opts[:rows]
+          opts[:class] = [opts[:class], 'textarea-sm-present'].join(' ')
+        else
+          opts[:class] = [opts[:class], 'textarea-sm'].join(' ')
+        end
+      end
+      text_area(name, opts)
+    end
+
+    # Returns <textarea> helper tag for tinyMCE editor
+    def tiny_mce_editor(name, options = {})
+      options.merge!(class: 'tinymce', cols: 120, rows: 15)
+      text_area(name, options)
     end
   end
 end

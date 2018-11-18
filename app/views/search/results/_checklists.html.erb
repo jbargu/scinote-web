@@ -1,6 +1,6 @@
 <% results.each do |checklist| %>
   <h5>
-    <span class="glyphicon glyphicon-check"></span>
+    <span class="fas fa-check-square"></span>
     <%= highlight checklist.name, search_query.strip.split(/\s+/) %>
   </h5>
 
@@ -45,7 +45,7 @@
       <span>
         <%=t "search.index.project" %>
         <%= render partial: "search/results/partials/project_text.html.erb",
-                   locals: { project: checklist.step.protocol.my_module.experiment.project } %>
+                   locals: { project: checklist.step.protocol.my_module.experiment.project, link_to_page: :show } %>
       </span>
     <% else %>
       <span>
@@ -56,9 +56,9 @@
     <% end %>
     <br>
     <span>
-      <%=t "search.index.organization" %>
-      <%= render partial: "search/results/partials/organization_text.html.erb",
-                 locals: { organization: checklist.step.protocol.organization } %>
+      <%=t "search.index.team" %>
+      <%= render partial: "search/results/partials/team_text.html.erb",
+                 locals: { team: checklist.step.protocol.team } %>
     </span>
   </p>
 

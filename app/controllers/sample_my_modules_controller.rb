@@ -1,10 +1,15 @@
 class SampleMyModulesController < ApplicationController
+  include TeamsHelper
   before_action :load_vars
 
   def index
     @number_of_samples = @my_module.number_of_samples
-    @samples = @my_module.first_n_samples(5)
+    @samples = @my_module.first_n_samples
 
+    current_team_switch(@my_module
+                                .experiment
+                                .project
+                                .team)
     respond_to do |format|
       format.json {
         render :json => {

@@ -1,27 +1,31 @@
-<% markdown = markdown ||= nil %>
 <div class="result">
   <div class="badge-num">
-    <span class="badge bg-primary icon">
+    <span class="badge icon">
     <% if result.is_text %>
-    <span class="glyphicon glyphicon-font"></span>
+    <span class="fas fa-font"></span>
     <% elsif result.is_table %>
-    <span class="glyphicon glyphicon-list-alt"></span>
+    <span class="fas fa-table"></span>
     <% elsif result.is_asset %>
-    <span class="glyphicon glyphicon-picture"></span>
+    <span class="fas fa-paperclip"></span>
     <% end %>
     </span>
   </div>
   <div class="panel panel-default">
     <div class="panel-heading">
       <div class="panel-options pull-right">
-        <% if can_edit_result(result) %>
+        <% if can_manage_module?(result.my_module) %>
           <a class="btn btn-link edit-result-button <%= edit_result_button_class(result) %>" id="<%= result.id %>_edit" href="<%= edit_result_link(result) %>" data-remote="true" title="<%= t'my_modules.results.options.edit_title' %>">
-            <span class="glyphicon glyphicon-edit"></span>
+            <span class="fas fa-pencil-alt"></span>
           </a>
         <% end %>
-        <% if can_archive_result(result) and not result.archived %>
-          <a href="#" class="btn btn-link form-submit-link" data-submit-form="result-archive-form-<%= result.id %>" data-confirm-form="<%= t('my_modules.results.archive_confirm') %>" title="<%= t'my_modules.results.options.archive_title' %>">
-            <span class="glyphicon glyphicon-briefcase"></span>
+        <% if can_manage_result?(result) %>
+          <a href="#"
+             class="btn btn-link form-submit-link"
+             data-form-id="result-archive-form-<%= result.id %>"
+             data-confirm-text="<%= t('my_modules.results.archive_confirm') %>"
+             title="<%= t'my_modules.results.options.archive_title' %>"
+             onclick="Results.archive(event, this);">
+            <span class="fas fa-briefcase"></span>
           </a>
           <%= form_for :result, url: result_path_of_type(result), method: :patch, html: {id: 'result-archive-form-' + result.id.to_s } do |f| %>
             <%= f.hidden_field :archived, value: true %>
@@ -29,32 +33,27 @@
         <% end %>
       </div>
       <a class="result-panel-collapse-link" href="#result-panel-<%= result.id %>" data-toggle="collapse" data-remote="true">
-        <span class="glyphicon glyphicon-collapse-down collapse-result-icon"></span>
+        <span class="fas fa-caret-square-down collapse-result-icon"></span>
         <strong><%= result.name %></strong> |
-        <span><%= raw t'my_modules.results.published_on', timestamp: l(result.created_at, format: :full), user: result.user.full_name %></span>
+        <span><%= t('my_modules.results.published_on', timestamp: l(result.created_at, format: :full), user: h(result.user.full_name)).html_safe %></span>
       </a>
     </div>
     <div class="panel-collapse collapse" id="result-panel-<%= result.id %>" role="tabpanel">
       <div class="panel-body">
-        <ul class="nav nav-tabs">
-          <li role="presentation" class="active">
-            <a href="#result-info-<%= result.id %>" data-toggle="tab"><span class="glyphicon glyphicon-info-sign"></span>
-              <%= t'my_modules.results.info_tab' %></a>
-          </li>
-          <% if can_view_result_comments(@my_module) %>
-          <li role="presentation">
-            <a class="comment-tab-link" href="<%= url_for result_result_comments_path(result_id: result.id, format: :json) %>" aria-controls="result-comments-<%= result.id %>" data-remote="true">
-              <span class="glyphicon glyphicon-comment"></span>
-              <%= t'my_modules.results.comments_tab' %></a>
-          </li>
-          <% end %>
-        </ul>
-        <div class="tab-content">
-          <div class="tab-pane active" role="tabpanel" id="result-info-<%= result.id %>">
-            <%= render partial: 'my_modules/result_user_generated.html.erb', locals: { result: result, markdown: markdown } %>
+        <div class="row">
+          <div class="col-xs-12" data-hook="result-content">
+            <%= render partial: 'my_modules/result_user_generated.html.erb',
+                       locals: { result: result } %>
           </div>
-          <div class="tab-pane" role="tabpanel" id="result-comments-<%= result.id %>"></div>
         </div>
+        <% if can_read_experiment?(@my_module.experiment) %>
+          <div class="row">
+            <div class="result-comment"
+                 id="result-comments-<%= result.id %>"
+                 data-href="<%= result_result_comments_url(result) %>">
+            </div>
+          </div>
+        <% end %>
       </div>
     </div>
   </div>

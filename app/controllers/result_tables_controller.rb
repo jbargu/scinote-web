@@ -5,8 +5,7 @@ class ResultTablesController < ApplicationController
   before_action :load_vars_nested, only: [:new, :create]
   before_action :convert_contents_to_utf8, only: [:create, :update]
 
-  before_action :check_create_permissions, only: [:new, :create]
-  before_action :check_edit_permissions, only: [:edit, :update]
+  before_action :check_manage_permissions, only: %i(new create edit update)
   before_action :check_archive_permissions, only: [:update]
 
   def new
@@ -31,7 +30,9 @@ class ResultTablesController < ApplicationController
   def create
     @table = Table.new(result_params[:table_attributes])
     @table.created_by = current_user
+    @table.team = current_team
     @table.last_modified_by = current_user
+    @table.name = nil
     @result = Result.new(
       user: current_user,
       my_module: @my_module,
@@ -47,6 +48,7 @@ class ResultTablesController < ApplicationController
           type_of: :add_result,
           user: current_user,
           project: @my_module.experiment.project,
+          experiment: @my_module.experiment,
           my_module: @my_module,
           message: t(
             "activities.add_table_result",
@@ -92,6 +94,7 @@ class ResultTablesController < ApplicationController
     update_params = result_params
     @result.last_modified_by = current_user
     @result.table.last_modified_by = current_user
+    @result.table.team = current_team
     @result.assign_attributes(update_params)
     flash_success = t("result_tables.update.success_flash",
       module: @my_module.name)
@@ -103,6 +106,7 @@ class ResultTablesController < ApplicationController
         Activity.create(
           type_of: :archive_result,
           project: @my_module.experiment.project,
+          experiment: @my_module.experiment,
           my_module: @my_module,
           user: current_user,
           message: t(
@@ -122,6 +126,7 @@ class ResultTablesController < ApplicationController
           type_of: :edit_result,
           user: current_user,
           project: @my_module.experiment.project,
+          experiment: @my_module.experiment,
           my_module: @my_module,
           message: t(
             "activities.edit_table_result",
@@ -190,21 +195,12 @@ class ResultTablesController < ApplicationController
     end
   end
 
-  def check_create_permissions
-    unless can_create_result_table_in_module(@my_module)
-      render_403
-    end
-  end
-
-  def check_edit_permissions
-    unless can_edit_result_table_in_module(@my_module)
-      render_403
-    end
+  def check_manage_permissions
+    render_403 unless can_manage_module?(@my_module)
   end
 
   def check_archive_permissions
-    if result_params[:archived].to_s != '' and
-      not can_archive_result(@result)
+    if result_params[:archived].to_s != '' && !can_manage_result?(@result)
       render_403
     end
   end
@@ -218,6 +214,4 @@ class ResultTablesController < ApplicationController
       ]
     )
   end
-
 end
-

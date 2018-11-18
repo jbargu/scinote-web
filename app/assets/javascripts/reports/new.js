@@ -1,21 +1,19 @@
-// Custom jQuery function that finds elements including
-// the parent element
-$.fn.findWithSelf = function(selector) {
-  return this.filter(selector).add(this.find(selector));
-};
+var REPORT_CONTENT = '#report-content';
+var ADD_CONTENTS_FORM_ID = '#add-contents-form';
+var SAVE_REPORT_FORM_ID = '#save-report-form';
 
-var REPORT_CONTENT = "#report-content";
-var SIDEBAR_PARENT_TREE = "#report-sidebar-tree";
-var ADD_CONTENTS_FORM_ID = "#add-contents-form";
-var SAVE_REPORT_FORM_ID = "#save-report-form";
-
-var hotTableContainers = null;
 var addContentsModal = null;
 var addContentsModalBody = null;
 var saveReportModal = null;
 var saveReportModalBody = null;
 
 var ignoreUnsavedWorkAlert;
+
+// Custom jQuery function that finds elements including
+// the parent element
+$.fn.findWithSelf = function(selector) {
+  return this.filter(selector).add(this.find(selector));
+};
 
 /**
  * INITIALIZATION FUNCTIONS
@@ -43,11 +41,12 @@ function initializeHandsonTable(el) {
       colHeaders: headers,
       columnSorting: true,
       editor: false,
-      copyPaste: false
+      copyPaste: false,
+      formulas: true
     });
     el.handsontable("getInstance").loadData(data);
     el.handsontable("getInstance").sort(3, order);
-    
+
     // "Hack" to disable user sorting rows by clicking on
     // header elements
     el.handsontable("getInstance")
@@ -61,7 +60,8 @@ function initializeHandsonTable(el) {
       rowHeaders: true,
       colHeaders: true,
       editor: false,
-      copyPaste: false
+      copyPaste: false,
+      formulas: true
     });
     el.handsontable("getInstance").loadData(data);
   }
@@ -79,8 +79,8 @@ function initializeElementControls(el) {
       sortCommentsElement(el, true);
     } else if (el.hasClass("report-module-activity-element")) {
       sortModuleActivityElement(el, true);
-    } else if (el.hasClass("report-module-samples-element")) {
-      sortModuleSamplesElement(el, true);
+    } else if (el.is("[data-sort-hot]")) {
+      sortModuleHotElement(el, true);
     } else {
       sortElementChildren(el, true, false);
     }
@@ -94,8 +94,8 @@ function initializeElementControls(el) {
       sortCommentsElement(el, false);
     } else if (el.hasClass("report-module-activity-element")) {
       sortModuleActivityElement(el, false);
-    } else if (el.hasClass("report-module-samples-element")) {
-      sortModuleSamplesElement(el, false);
+    } else if (el.is("[data-sort-hot]")) {
+      sortModuleHotElement(el, false);
     } else {
       sortElementChildren(el, false, false);
     }
@@ -196,15 +196,16 @@ function initializeNewElement(newEl) {
       url: url,
       type: "GET",
       dataType: "json",
-      data: {
-        id: parentElementId
-      },
+      data: parentElementId,
       success: function(data, status, jqxhr) {
-        // Open modal, set its title
+        // Open modal, set its title, and display module contents
         addContentsModal.find(".modal-title").text(modalTitle);
-
-        // Display module contents
         addContentsModalBody.html(data.html);
+
+        // Add logic for checkbox hierarchies
+        var dependencies = { '_module_steps': $('#_step_all'),
+                             '_module_results': $('#_result_comments')}
+        addContentsModalBody.checkboxTreeLogic(dependencies, true);
 
         // Bind to the ajax events of the modal form in its body
         $(ADD_CONTENTS_FORM_ID)
@@ -217,9 +218,6 @@ function initializeNewElement(newEl) {
           } else if (data.status == 200) {
             // Add elements
             addElements(el, data.responseJSON.elements);
-
-            // Update sidebar
-            initializeSidebarNavigation();
           }
         })
         .on("ajax:error", function(e, xhr, settings, error) {
@@ -315,7 +313,12 @@ function initializeSaveReport() {
         .on("ajax:success", function(e, xhr, opts, data) {
           if (data.status == 200) {
             // Redirect back to index
+
+            // Turn off all hooks related to alert window
             ignoreUnsavedWorkAlert = true;
+            $(window).off('beforeunload');
+            $(document).off('page:before-change');
+
             $(location).attr("href", xhr.url);
           }
         })
@@ -433,174 +436,45 @@ function initializeSaveToPdf() {
 }
 
 function initializeUnsavedWorkDialog() {
-  var dh = $("#data-holder");
-  var alertText = dh.attr("data-unsaved-work-text");
+  var dh = $('#data-holder');
+  var alertText = dh.attr('data-unsaved-work-text');
 
   ignoreUnsavedWorkAlert = false;
 
-  $(window)
-  .on("beforeunload", function(ev) {
-    if (ignoreUnsavedWorkAlert) {
-      // Remove unload listeners
-      $(window).off("beforeunload");
-      $(document).off("page:before-change");
-
-      ev.returnValue = undefined;
-      return undefined;
-    } else {
-      return alertText;
-    }
-  });
-  $(document).on("page:before-change", function(ev) {
+  /**
+   * Before unload event logic
+   */
+  function beforeUnload() {
     var exit;
     if (ignoreUnsavedWorkAlert) {
       exit = true;
     } else {
       exit = confirm(alertText);
     }
-
     if (exit) {
-      // Remove unload listeners
-      $(window).off("beforeunload");
-      $(document).off("page:before-change");
+      // We leave the page so remove all listeners
+      $(document).off('turbolinks:before-visit');
     }
-
     return exit;
-  });
-}
-
-/**
- * SIDEBAR CODE
- */
-
- /**
-  * Get the sidebar <li> element for the specified report element.
-  * @param reportEl - The .report-element in the report.
-  * @return The corresponding sidebar <li>.
-  */
-function getSidebarEl(reportEl) {
-  var type = reportEl.data("type");
-  var id = reportEl.data("id");
-  return $(SIDEBAR_PARENT_TREE).find(
-    "li" +
-    "[data-type='" + type + "']" +
-    "[data-id='" + id + "']"
-  );
-}
-
-/**
- * Get the report <div.report-element> element for the specified
- * sidebar element.
- * @param sidebarEl - The <li> sidebar element.
- * @return The corresponding report element.
- */
-function getReportEl(sidebarEl) {
-  var type = sidebarEl.data("type");
-  var id = sidebarEl.data("id");
-  return $(REPORT_CONTENT).find(
-    "div.report-element" +
-    "[data-type='" + type + "']" +
-    "[data-id='" + id + "']"
-  );
-}
-
-/**
- * Initialize the sidebar navigation pane.
- */
-function initializeSidebarNavigation() {
-  var reportContent = $(REPORT_CONTENT);
-  var treeParent = $(SIDEBAR_PARENT_TREE);
-
-  // Remove existing contents (also remove click listeners)
-  treeParent.find(".report-nav-link").off("click");
-  treeParent.children().remove();
-
-  // Re-populate the sidebar
-  _.each(reportContent.children(".report-element"), function(child) {
-    var li = initSidebarElement($(child));
-    li.appendTo(treeParent);
-  });
-
-  // Add click listener on all links
-  treeParent.find(".report-nav-link").click(function(e) {
-    var el = $(this).closest("li");
-    scrollToElement(el);
-
-    e.preventDefault();
-    e.stopPropagation();
-    return false;
-  });
-
-  // Call to sidebar function to re-initialize tree functionality
-  setupSidebarTree();
-}
-
-/**
- * Recursive call to initialize sidebar elements.
- * @param reportEl - The report element for which to
- * generate the sidebar.
- * @return A <li> jQuery element containing sidebar entry.
- */
-function initSidebarElement(reportEl) {
-  var elChildrenContainer = reportEl.children(".report-element-children");
-  var type = reportEl.data("type");
-  var name = reportEl.data("name");
-  var id = reportEl.data("id");
-  var iconClass = "glyphicon " + reportEl.data("icon-class");
-
-  // Generate list element
-  var newLi = $(document.createElement("li"));
-  newLi
-  .attr("data-type", type)
-  .attr("data-id", id);
-
-  var newSpan = $(document.createElement("span"));
-  newSpan.appendTo(newLi);
-  var newI = $(document.createElement("i"));
-  newI.appendTo(newSpan);
-  var newHref = $(document.createElement("a"));
-  newHref
-  .attr("href", "")
-  .addClass("report-nav-link")
-  .text(name)
-  .appendTo(newSpan);
-  var newIcon = $(document.createElement("span"));
-  newIcon.addClass(iconClass).prependTo(newHref);
-
-  if (elChildrenContainer.length && elChildrenContainer.length > 0) {
-    var elChildren = elChildrenContainer.children(".report-element");
-    if (elChildren.length && elChildren.length > 0) {
-      var newUl = $(document.createElement("ul"));
-      newUl.appendTo(newLi);
-
-      _.each(elChildren, function(child) {
-        var li = initSidebarElement($(child));
-        li.appendTo(newUl);
-      });
-    }
   }
 
-  return newLi;
+  $(document).on('turbolinks:before-visit', beforeUnload);
 }
 
 /**
- * Scroll to the specified element in the report.
- * @param sidebarEl - The sidebar element.
+ * Initializes page
  */
-function scrollToElement(sidebarEl) {
-  var el = getReportEl(sidebarEl);
+function init() {
+  initializeReportElements($(REPORT_CONTENT));
+  initializeGlobalReportSort();
+  initializePrintPopup();
+  initializeSaveToPdf();
+  initializeSaveReport();
+  initializeAddContentsModal();
+  initializeUnsavedWorkDialog();
 
-  if (el.length && el.length == 1) {
-    var content = $("body");
-    content.scrollTo(
-      el,
-      {
-        axis: 'y',
-        duration: 500,
-        offset: -150
-      }
-    );
-  }
+  // Automatically display the "Add content" modal
+  $('.new-element.initial').click();
 }
 
 /**
@@ -666,8 +540,6 @@ function sortWholeReport(asc) {
     sortElementChildren($(el), asc, true);
   });
 
-  // Reinitialize sidebar
-  initializeSidebarNavigation();
   animateLoading(false);
 }
 
@@ -715,22 +587,6 @@ function sortElementChildren(el, asc, recursive) {
     updateElementControls($(child));
     if (recursive) {
       sortElementChildren($(child), asc, true);
-    }
-  });
-
-  // Update sidebar
-  var prevEl = null;
-  _.each(children, function(child) {
-    var sidebarEl = getSidebarEl($(child));
-    if (sidebarEl.length && sidebarEl.length == 1) {
-      var sidebarParent = sidebarEl.closest("ul");
-      sidebarEl.detach();
-      if (prevEl === null) {
-        sidebarParent.prepend(sidebarEl);
-      } else {
-        prevEl.after(sidebarEl);
-      }
-      prevEl = sidebarEl;
     }
   });
 }
@@ -794,17 +650,18 @@ function sortModuleActivityElement(el, asc) {
 }
 
 /**
- * Sort the module samples element (special handling needs
+ * Sort the module HoT element (special handling needs
  * to be done in this case).
- * @param el - The module samples element in the report.
+ * @param el - The module element in the report that contains handsontables.
  * @param asc - True to sort in ascending order, false to sort
  * in descending order.
  */
-function sortModuleSamplesElement(el, asc) {
+function sortModuleHotElement(el, asc) {
   var hotEl = el.find(".report-element-body .hot-table-container");
   var hotInstance = hotEl.handsontable("getInstance");
+  var col = el.attr('data-sort-hot');
 
-  hotInstance.sort(3, asc);
+  hotInstance.sort(col, asc);
 
   // Update data attribute on sorting on the element
   el.attr("data-order", asc ? "asc" : "desc");
@@ -826,18 +683,11 @@ function moveElement(el, up) {
     return;
   }
 
-  var sidebarEl;
   if (up) {
     var prevEl = prevNewEl.prev();
     if (!prevEl.length || !prevEl.hasClass("report-element")) {
       return;
     }
-
-    // Move sidebar element up
-    sidebarEl = getSidebarEl(el);
-    var sidebarPrev = sidebarEl.prev();
-    sidebarEl.detach();
-    sidebarPrev.before(sidebarEl);
 
     el.detach();
     nextNewEl.detach();
@@ -845,18 +695,11 @@ function moveElement(el, up) {
     prevEl.before(nextNewEl);
     updateElementControls(prevEl);
 
-
   } else {
     var nextEl = nextNewEl.next();
     if (!nextEl.length || !nextEl.hasClass("report-element")) {
       return;
     }
-
-    // Move sidebar element up
-    sidebarEl = getSidebarEl(el);
-    var sidebarNext = sidebarEl.next();
-    sidebarEl.detach();
-    sidebarNext.after(sidebarEl);
 
     prevNewEl.detach();
     el.detach();
@@ -887,10 +730,6 @@ function removeElement(el) {
 
   // TODO Remove event listeners
 
-  // Remove sidebar entry
-  var sidebarEl = getSidebarEl(el);
-  sidebarEl.remove();
-
   prevNewEl.remove();
   el.remove();
 
@@ -914,10 +753,6 @@ function removeResultCommentsElement(el) {
   var parent = el.closest(".report-element-children");
 
   // TODO Remove event listeners
-
-  // Remove sidebar entry
-  var sidebarEl = getSidebarEl(el);
-  sidebarEl.remove();
 
   // Remove element, show the new element container
   el.remove();
@@ -1004,7 +839,7 @@ function addElement(jsonEl, prevEl) {
     .find(
       ".report-element" +
       "[data-type='" + el.attr("data-type") + "']" +
-      "[data-id='" + el.attr("data-id") + "']"
+      "[data-scroll-id='" + el.attr("data-scroll-id") + "']"
     );
     if (existing.length && existing.length > 0) {
       // TODO Remove event listeners on existing element
@@ -1107,81 +942,7 @@ function constructElementContentsJson(el) {
   return jsonEl;
 }
 
-/* Initialize the first-time demo tutorial if needed. */
-function initializeTutorial() {
-  if (showTutorial()) {
-    ignoreUnsavedWorkAlert = true;
-
-    introJs()
-      .setOptions({
-        overlayOpacity: '0.1',
-        nextLabel: 'Next',
-        doneLabel: 'End tutorial',
-        skipLabel: 'End tutorial',
-        showBullets: false,
-        showStepNumbers: false,
-        exitOnOverlayClick: false,
-        exitOnEsc: false,
-        tooltipClass: 'custom next-page-link',
-        disableInteraction: true
-      })
-      .onafterchange(function (tarEl) {
-        Cookies.set('current_tutorial_step', this._currentStep + 18);
-
-        if (this._currentStep == 1) {
-          setTimeout(function() {
-            $('.next-page-link a.introjs-nextbutton')
-              .removeClass('introjs-disabled')
-              .attr('href', tarEl.href);
-            $('.introjs-disableInteraction').remove();
-          }, 500);
-        } else {
-
-        }
-      })
-      .start();
-
-    window.onresize = function() {
-      if (Cookies.get('current_tutorial_step') == 18) {
-        $(".introjs-tooltip").css("right", ($(".new-element.initial").width() + 60)  + "px");
-      }
-    };
-
-    // Destroy first-time tutorial cookies when skip tutorial
-    // or end tutorial is clicked
-    $(".introjs-skipbutton").each(function (){
-      $(this).click(function (){
-        Cookies.remove('tutorial_data');
-        Cookies.remove('current_tutorial_step');
-      });
-    });
-  }
+// Check if we are actually at new report page
+if ($(REPORT_CONTENT).length) {
+  init();
 }
-
-function showTutorial() {
-  var tutorialData;
-  if (Cookies.get('tutorial_data'))
-    tutorialData = JSON.parse(Cookies.get('tutorial_data'));
-  else
-    return false;
-  var currentStep = Cookies.get('current_tutorial_step');
-  if (currentStep < 16 || currentStep > 18)
-    return false;
-  var tutorialProjectId = tutorialData[0].project;
-  var currentProjectId = $("#data-holder").attr("data-project-id");
-  return tutorialProjectId == currentProjectId;
-}
-
-/**
- * ACTUAL CODE
- */
-initializeReportElements($(REPORT_CONTENT));
-
-initializeGlobalReportSort();
-initializePrintPopup();
-initializeSaveToPdf();
-initializeSaveReport();
-initializeAddContentsModal();
-initializeSidebarNavigation();
-initializeUnsavedWorkDialog();
-initializeTutorial();

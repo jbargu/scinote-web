@@ -1,16 +1,24 @@
-class Result < ActiveRecord::Base
+class Result < ApplicationRecord
   include ArchivableModel, SearchableModel
 
+  auto_strip_attributes :name, nullify: false
   validates :user, :my_module, presence: true
-  validates :name,
-    length: { maximum: 50 }
-  validate :text_or_asset_or_table
+  validates :name, length: { maximum: Constants::NAME_MAX_LENGTH }
 
-  belongs_to :user, inverse_of: :results
-  belongs_to :last_modified_by, foreign_key: 'last_modified_by_id', class_name: 'User'
-  belongs_to :archived_by, foreign_key: 'archived_by_id', class_name: 'User'
-  belongs_to :restored_by, foreign_key: 'restored_by_id', class_name: 'User'
-  belongs_to :my_module, inverse_of: :results
+  belongs_to :user, inverse_of: :results, optional: true
+  belongs_to :last_modified_by,
+             foreign_key: 'last_modified_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :archived_by,
+             foreign_key: 'archived_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :restored_by,
+             foreign_key: 'restored_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :my_module, inverse_of: :results, optional: true
   has_one :result_asset,
     inverse_of: :result,
     dependent: :destroy
@@ -22,49 +30,43 @@ class Result < ActiveRecord::Base
   has_one :result_text,
     inverse_of: :result,
     dependent: :destroy
-  has_many :result_comments,
-    inverse_of: :result,
-    dependent: :destroy
-  has_many :comments, through: :result_comments
+  has_many :result_comments, foreign_key: :associated_id, dependent: :destroy
   has_many :report_elements, inverse_of: :result, dependent: :destroy
 
   accepts_nested_attributes_for :result_text
   accepts_nested_attributes_for :asset
   accepts_nested_attributes_for :table
 
-  def self.search(user, include_archived, query = nil, page = 1)
+  def self.search(user,
+                  include_archived,
+                  query = nil,
+                  page = 1,
+                  _current_team = nil,
+                  options = {})
     module_ids =
       MyModule
-      .search(user, include_archived, nil, SHOW_ALL_RESULTS)
-      .select("id")
+      .search(user, include_archived, nil, Constants::SEARCH_NO_LIMIT)
+      .pluck(:id)
 
-    if query
-      a_query = query.strip
-      .gsub("_","\\_")
-      .gsub("%","\\%")
-      .split(/\s+/)
-      .map {|t|  "%" + t + "%" }
-    else
-      a_query = query
-    end
-
-    new_query = Result
+    new_query =
+      Result
       .distinct
-      .joins("LEFT JOIN result_texts ON results.id = result_texts.result_id")
-      .where("results.my_module_id IN (?)", module_ids)
-      .where_attributes_like(["results.name", "result_texts.text"], a_query)
+      .joins('LEFT JOIN result_texts ON results.id = result_texts.result_id')
+      .where('results.my_module_id IN (?)', module_ids)
+      .where_attributes_like(['results.name', 'result_texts.text'],
+                             query, options)
 
     unless include_archived
-      new_query = new_query.where("results.archived = ?", false)
+      new_query = new_query.where('results.archived = ?', false)
     end
 
     # Show all results if needed
-    if page == SHOW_ALL_RESULTS
+    if page == Constants::SEARCH_NO_LIMIT
       new_query
     else
       new_query
-        .limit(SEARCH_LIMIT)
-        .offset((page - 1) * SEARCH_LIMIT)
+        .limit(Constants::SEARCH_LIMIT)
+        .offset((page - 1) * Constants::SEARCH_LIMIT)
     end
   end
 
@@ -72,13 +74,14 @@ class Result < ActiveRecord::Base
     is_asset ? result_asset.space_taken : 0
   end
 
-  def last_comments(last_id = 1, per_page = 20)
-    last_id = 9999999999999 if last_id <= 1
-    Comment.joins(:result_comment)
-    .where(result_comments: {result_id: id})
-    .where('comments.id <  ?', last_id)
-    .order(created_at: :desc)
-    .limit(per_page)
+  def last_comments(last_id = 1, per_page = Constants::COMMENTS_SEARCH_LIMIT)
+    last_id = Constants::INFINITY if last_id <= 1
+    comments = ResultComment.joins(:result)
+                            .where(results: { id: id })
+                            .where('comments.id <  ?', last_id)
+                            .order(created_at: :desc)
+                            .limit(per_page)
+    comments.reverse
   end
 
   def is_text
@@ -93,19 +96,11 @@ class Result < ActiveRecord::Base
     self.asset.present?
   end
 
-  private
-  def text_or_asset_or_table
-    num_of_assigns = 0
-    num_of_assigns += result_text.blank? ? 0 : 1
-    num_of_assigns += asset.blank? ? 0 : 1
-    num_of_assigns += table.blank? ? 0 : 1
-
-    # Theoretically, we should make sure == 1, not > 1,
-    # but due to GUI problems this is how it is
-    if num_of_assigns > 1
-      errors.add(:base, "Result can only be instance of text/asset/table.")
-    elsif num_of_assigns < 1
-      errors.add(:base, "Result should be instance of text/asset/table.")
+  def unlocked?(result)
+    if result.is_asset
+      !result.asset.locked?
+    else
+      true
     end
   end
 end

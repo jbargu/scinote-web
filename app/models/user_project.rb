@@ -1,15 +1,22 @@
-class UserProject < ActiveRecord::Base
+class UserProject < ApplicationRecord
   enum role: { owner: 0, normal_user: 1, technician: 2, viewer: 3 }
 
   validates :role, presence: true
   validates :user, presence: true
   validates :project, presence: true
 
-  belongs_to :user, inverse_of: :user_projects
-  belongs_to :assigned_by, foreign_key: 'assigned_by_id', class_name: 'User'
-  belongs_to :project, inverse_of: :user_projects
+  belongs_to :user, inverse_of: :user_projects, touch: true, optional: true
+  belongs_to :assigned_by,
+             foreign_key: 'assigned_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :project, inverse_of: :user_projects, touch: true, optional: true
 
   before_destroy :destroy_associations
+
+  after_commit do
+    Views::Datatables::DatatablesReport.refresh_materialized_view
+  end
 
   def role_str
     I18n.t("user_projects.enums.role.#{role.to_s}")

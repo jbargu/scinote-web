@@ -1,24 +1,27 @@
 class UserProjectsController < ApplicationController
+  include NotificationsHelper
+  include InputSanitizeHelper
+
   before_action :load_vars
-  before_action :check_view_tab_permissions, only: [ :index ]
-  before_action :check_view_permissions, only: [ :index_edit ]
-  before_action :check_create_permissions, only: [:new, :create]
-  # TODO  check update permissions
-  before_action :check_update_permisisons, only: [:update]
-  before_action :check_delete_permisisons, only: [:destroy]
+  before_action :load_up_var, only: %i(update destroy)
+  before_action :check_view_permissions, only: :index
+  before_action :check_manage_users_permissions, only: :index_edit
+  before_action :check_create_permissions, only: :create
+  before_action :check_manage_permissions, only: %i(update destroy)
 
   def index
     @users = @project.user_projects
 
     respond_to do |format|
-      #format.html
-      format.json {
-        render :json => {
-          :html => render_to_string({
-            :partial => "index.html.erb"
-          })
+      format.json do
+        render json: {
+          html: render_to_string(
+            partial: 'index.html.erb'
+          ),
+          project_id: @project.id,
+          counter: @project.users.count # Used for counter badge
         }
-      }
+      end
     end
   end
 
@@ -28,25 +31,20 @@ class UserProjectsController < ApplicationController
     @up = UserProject.new(project: @project)
 
     respond_to do |format|
-      format.json {
-        render :json => {
-          :project => @project,
-          :html_body => render_to_string({
-            :partial => "index_edit.html.erb"
-          }),
-          :html_footer => render_to_string({
-            :partial => "index_edit_footer.html.erb"
-          })
+      format.json do
+        render json: {
+          project: @project,
+          html_header: t('projects.index.modal_manage_users.modal_title_html',
+                         name: @project.name),
+          html_body: render_to_string(
+            partial: 'index_edit.html.erb'
+          ),
+          html_footer: render_to_string(
+            partial: 'index_edit_footer.html.erb'
+          )
         }
-      }
+      end
     end
-  end
-
-  def new
-    @up = UserProject.new(
-      project: @project
-    )
-    init_gui
   end
 
   def create
@@ -54,10 +52,6 @@ class UserProjectsController < ApplicationController
     @up.assigned_by = current_user
 
     if @up.save
-      flash_success = t('user_projects.create.success_flash',
-        user: @up.user.full_name,
-        project: @up.project.name)
-
       # Generate activity
       Activity.create(
         type_of: :assign_user_to_project,
@@ -73,59 +67,29 @@ class UserProjectsController < ApplicationController
       )
 
       respond_to do |format|
-        format.html {
-          flash[:success] = flash_success
-          redirect_to projects_path
-        }
-        format.json {
-          redirect_to :action => :index_edit, :format => :json
-        }
+        format.json do
+          redirect_to project_users_edit_path(format: :json), turbolinks: false
+        end
       end
     else
-       flash_error = t('user_projects.create.error_flash',
-         user: @up.user.full_name,
-         project: @up.project.name)
       error = t('user_projects.create.can_add_user_to_project')
       error = t('user_projects.create.select_user_role') unless @up.role
 
       respond_to do |format|
-        format.html {
-          flash[:error] = flash_error
-          init_gui
-          render :new
-        }
         format.json {
           render :json => {
             status: 'error',
-            error: error,
-            :errors => [
-              flash_error
-            ]
+            error: error
           }
         }
       end
     end
   end
 
-  def edit
-    @up = UserProject.find(params[:id])
-  end
-
   def update
-    @up = UserProject.find(params[:id])
-
-    unless @up
-      render_404
-    end
-
     @up.role = up_params[:role]
 
     if @up.save
-      flash_success = t(
-        "user_projects.update.success_flash",
-        user: @up.user.full_name,
-        project: @up.project.name)
-
       # Generate activity
       Activity.create(
         type_of: :change_user_role_on_project,
@@ -141,25 +105,12 @@ class UserProjectsController < ApplicationController
       )
 
       respond_to do |format|
-        format.html {
-          flash[:success] = flash_success
-          redirect_to projects_path
-        }
-        format.json {
-          redirect_to :action => :index_edit, :format => :json
-        }
+        format.json do
+          redirect_to project_users_edit_path(format: :json), turbolinks: false
+        end
       end
     else
-      flash_error = t('user_projects.update.error_flash',
-        user: @up.user.full_name,
-        project: @up.project.name)
-
       respond_to do |format|
-        format.html {
-          flash[:error] = flash_error
-          init_gui
-          render :new
-        }
         format.json {
           render :json => {
             status: 'error',
@@ -174,11 +125,6 @@ class UserProjectsController < ApplicationController
 
   def destroy
     if @up.destroy
-      flash_success = t(
-        'user_projects.destroy.success_flash',
-         user: @up.user.full_name,
-         project: @up.project.name)
-
       # Generate activity
       Activity.create(
         type_of: :unassign_user_from_project,
@@ -191,28 +137,17 @@ class UserProjectsController < ApplicationController
           unassigned_by_user: current_user.full_name
         )
       )
+      generate_notification(current_user, @up.user, false, false, @project)
 
       respond_to do |format|
-        format.html {
-          flash[:success] = flash_success
-          redirect_to projects_path, :status => 303
-        }
-        format.json {
-          redirect_to project_users_edit_path(format: :json), :status => 303
-        }
+        format.json do
+          redirect_to project_users_edit_path(format: :json),
+                      turbolinks: false,
+                      status: 303
+        end
       end
     else
-       flash_error = t('user_projects.destroy.error_flash',
-         user: @up.user.full_name,
-         project: @up.project.name)
-
       respond_to do |format|
-        format.html {
-          flash[:error] = flash_error
-          init_gui
-          # TODO handle response for html format in case of error
-          render :new
-        }
         format.json {
           render :json => {
             :errors => [
@@ -228,51 +163,29 @@ class UserProjectsController < ApplicationController
 
   def load_vars
     @project = Project.find_by_id(params[:project_id])
-    unless @project
-      render_404
-    end
-
-    if action_name == "destroy"
-      @up = UserProject.find(params[:id])
-      unless @up
-        render_404
-      end
-    end
+    render_404 unless @project
   end
 
-  def check_view_tab_permissions
-    unless can_view_project_users(@project)
-      render_403
-    end
+  def load_up_var
+    @up = UserProject.find(params[:id])
+    render_404 unless @up
   end
 
   def check_view_permissions
-    unless can_edit_users_on_project(@project)
-      render_403
-    end
+    render_403 unless can_read_project?(@project)
+  end
+
+  def check_manage_users_permissions
+    render_403 unless can_manage_project?(@project)
   end
 
   def check_create_permissions
-    unless can_add_user_to_project(@project)
-      render_403
-    end
+    render_403 unless can_create_projects?(current_team)
   end
 
-  def check_update_permisisons
-    # TODO improve permissions for changing your role on project
-    unless params[:id] != current_user.id
-      render_403
-    end
-  end
-
-  def check_delete_permisisons
-    # TODO improve permissions for remove yourself from project
-    unless params[:id] != current_user.id
-      render_403
-    end
-    unless can_remove_user_from_project(@project)
-      render_403
-    end
+  def check_manage_permissions
+    render_403 unless can_manage_project?(@project) &&
+                      @up.user_id != current_user.id
   end
 
   def init_gui

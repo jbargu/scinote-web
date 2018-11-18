@@ -1,80 +1,134 @@
-class MyModule < ActiveRecord::Base
+class MyModule < ApplicationRecord
   include ArchivableModel, SearchableModel
+
+  enum state: Extends::TASKS_STATES
 
   before_create :create_blank_protocol
 
+  auto_strip_attributes :name, :description, nullify: false
   validates :name,
-    presence: true,
-    length: { minimum: 2, maximum: 50 }
+            length: { minimum: Constants::NAME_MIN_LENGTH,
+                      maximum: Constants::NAME_MAX_LENGTH }
+  validates :description, length: { maximum: Constants::TEXT_MAX_LENGTH }
   validates :x, :y, :workflow_order, presence: true
   validates :experiment, presence: true
-  validates :my_module_group, presence: true, if: "!my_module_group_id.nil?"
+  validates :my_module_group, presence: true,
+            if: proc { |mm| !mm.my_module_group_id.nil? }
 
-  belongs_to :created_by, foreign_key: 'created_by_id', class_name: 'User'
-  belongs_to :last_modified_by, foreign_key: 'last_modified_by_id', class_name: 'User'
-  belongs_to :archived_by, foreign_key: 'archived_by_id', class_name: 'User'
-  belongs_to :restored_by, foreign_key: 'restored_by_id', class_name: 'User'
-  belongs_to :experiment, inverse_of: :my_modules
-  belongs_to :my_module_group, inverse_of: :my_modules
-  has_many :results, inverse_of: :my_module, :dependent => :destroy
-  has_many :my_module_tags, inverse_of: :my_module, :dependent => :destroy
+  belongs_to :created_by,
+             foreign_key: 'created_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :last_modified_by,
+             foreign_key: 'last_modified_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :archived_by,
+             foreign_key: 'archived_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :restored_by,
+             foreign_key: 'restored_by_id',
+             class_name: 'User',
+             optional: true
+  belongs_to :experiment, inverse_of: :my_modules, touch: true, optional: true
+  belongs_to :my_module_group, inverse_of: :my_modules, optional: true
+  has_many :results, inverse_of: :my_module, dependent: :destroy
+  has_many :my_module_tags, inverse_of: :my_module, dependent: :destroy
   has_many :tags, through: :my_module_tags
-  has_many :my_module_comments, inverse_of: :my_module, :dependent => :destroy
-  has_many :comments, through: :my_module_comments
-  has_many :inputs, :class_name => 'Connection', :foreign_key => "input_id", inverse_of: :to, :dependent => :destroy
-  has_many :outputs, :class_name => 'Connection', :foreign_key => "output_id", inverse_of: :from, :dependent => :destroy
+  has_many :task_comments, foreign_key: :associated_id, dependent: :destroy
+  has_many :inputs,
+           class_name: 'Connection',
+           foreign_key: 'input_id',
+           inverse_of: :to,
+           dependent: :destroy
+  has_many :outputs,
+           class_name: 'Connection',
+           foreign_key: 'output_id',
+           inverse_of: :from,
+           dependent: :destroy
   has_many :my_modules, through: :outputs, source: :to
-  has_many :my_module_antecessors, through: :inputs, source: :from, class_name: 'MyModule'
-  has_many :sample_my_modules, inverse_of: :my_module, :dependent => :destroy
+  has_many :my_module_antecessors,
+           through: :inputs,
+           source: :from,
+           class_name: 'MyModule'
+  has_many :sample_my_modules,
+           inverse_of: :my_module,
+           dependent: :destroy
   has_many :samples, through: :sample_my_modules
-  has_many :user_my_modules, inverse_of: :my_module, :dependent => :destroy
+  has_many :my_module_repository_rows,
+           inverse_of: :my_module, dependent: :destroy
+  has_many :repository_rows, through: :my_module_repository_rows
+  has_many :user_my_modules, inverse_of: :my_module, dependent: :destroy
   has_many :users, through: :user_my_modules
   has_many :activities, inverse_of: :my_module
-  has_many :report_elements, inverse_of: :my_module, :dependent => :destroy
+  has_many :report_elements, inverse_of: :my_module, dependent: :destroy
   has_many :protocols, inverse_of: :my_module, dependent: :destroy
 
   scope :is_archived, ->(is_archived) { where('archived = ?', is_archived) }
+  scope :active, -> { where(archived: false) }
+  scope :overdue, -> { where('my_modules.due_date < ?', Time.current.utc) }
+  scope :one_day_prior, (lambda do
+    where('my_modules.due_date > ? AND my_modules.due_date < ?',
+          Time.current.utc,
+          Time.current.utc + 1.day)
+  end)
 
   # A module takes this much space in canvas (x, y) in database
   WIDTH = 30
   HEIGHT = 14
 
-  def self.search(user, include_archived, query = nil, page = 1)
+  def self.search(
+    user,
+    include_archived,
+    query = nil,
+    page = 1,
+    current_team = nil,
+    options = {}
+  )
     exp_ids =
       Experiment
-      .search(user, include_archived, nil, SHOW_ALL_RESULTS)
-      .select("id")
+      .search(user, include_archived, nil, Constants::SEARCH_NO_LIMIT)
+      .pluck(:id)
 
-    if query
-      a_query = query.strip
-      .gsub("_","\\_")
-      .gsub("%","\\%")
-      .split(/\s+/)
-      .map {|t|  "%" + t + "%" }
-    else
-      a_query = query
-    end
+    if current_team
+      experiments_ids = Experiment
+                        .search(user,
+                                include_archived,
+                                nil,
+                                1,
+                                current_team)
+                        .select('id')
+      new_query = MyModule
+                  .distinct
+                  .where('my_modules.experiment_id IN (?)', experiments_ids)
+                  .where_attributes_like([:name, :description], query, options)
 
-    if include_archived
+      if include_archived
+        return new_query
+      else
+        return new_query.where('my_modules.archived = ?', false)
+      end
+    elsif include_archived
       new_query = MyModule
-        .distinct
-        .where("my_modules.experiment_id IN (?)", exp_ids)
-        .where_attributes_like([:name, :description], a_query)
+                  .distinct
+                  .where('my_modules.experiment_id IN (?)', exp_ids)
+                  .where_attributes_like([:name, :description], query, options)
     else
       new_query = MyModule
-        .distinct
-        .where("my_modules.experiment_id IN (?)", exp_ids)
-        .where("my_modules.archived = ?", false)
-        .where_attributes_like([:name, :description], a_query)
+                  .distinct
+                  .where('my_modules.experiment_id IN (?)', exp_ids)
+                  .where('my_modules.archived = ?', false)
+                  .where_attributes_like([:name, :description], query, options)
     end
 
     # Show all results if needed
-    if page == SHOW_ALL_RESULTS
+    if page == Constants::SEARCH_NO_LIMIT
       new_query
     else
       new_query
-        .limit(SEARCH_LIMIT)
-        .offset((page - 1) * SEARCH_LIMIT)
+        .limit(Constants::SEARCH_LIMIT)
+        .offset((page - 1) * Constants::SEARCH_LIMIT)
     end
   end
 
@@ -89,10 +143,10 @@ class MyModule < ActiveRecord::Base
     MyModule.transaction do
       archived = super
       # Unassociate all samples from module.
-      archived = SampleMyModule.destroy_all(:my_module => self) if archived
+      archived = SampleMyModule.where(my_module: self).destroy_all if archived
       # Remove all connection between modules.
-      archived = Connection.delete_all(:input_id => id) if archived
-      archived = Connection.delete_all(:output_id => id) if archived
+      archived = Connection.where(input_id: id).delete_all if archived
+      archived = Connection.where(output_id: id).delete_all if archived
       unless archived
         raise ActiveRecord::Rollback
       end
@@ -116,6 +170,7 @@ class MyModule < ActiveRecord::Base
         raise ActiveRecord::Rollback
       end
     end
+    experiment.delay.generate_workflow_img
     restored
   end
 
@@ -131,7 +186,7 @@ class MyModule < ActiveRecord::Base
   end
 
   def unassigned_samples
-    Sample.where(organization_id: experiment.project.organization).where.not(id: samples)
+    Sample.where(team_id: experiment.project.team).where.not(id: samples)
   end
 
   def unassigned_tags
@@ -143,29 +198,31 @@ class MyModule < ActiveRecord::Base
       )
   end
 
-  def last_activities(count = 20)
+  def last_activities(count = Constants::ACTIVITY_AND_NOTIF_SEARCH_LIMIT)
     Activity.where(my_module_id: id).order(:created_at).last(count)
   end
 
   # Get module comments ordered by created_at time. Results are paginated
   # using last comment id and per_page parameters.
-  def last_comments(last_id = 1, per_page = 20)
-    last_id = 9999999999999 if last_id <= 1
-    Comment.joins(:my_module_comment)
-      .where(my_module_comments: {my_module_id: id})
-      .where('comments.id <  ?', last_id)
-      .order(created_at: :desc)
-      .limit(per_page)
+  def last_comments(last_id = 1, per_page = Constants::COMMENTS_SEARCH_LIMIT)
+    last_id = Constants::INFINITY if last_id <= 1
+    comments = TaskComment.joins(:my_module)
+                          .where(my_modules: { id: id })
+                          .where('comments.id <  ?', last_id)
+                          .order(created_at: :desc)
+                          .limit(per_page)
+    comments.reverse
   end
 
-  def last_activities(last_id = 1, count = 20)
-    last_id = 9999999999999 if last_id <= 1
+  def last_activities(last_id = 1,
+                      count = Constants::ACTIVITY_AND_NOTIF_SEARCH_LIMIT)
+    last_id = Constants::INFINITY if last_id <= 1
     Activity.joins(:my_module)
-      .where(my_module_id: id)
-      .where('activities.id <  ?', last_id)
-      .order(created_at: :desc)
-      .limit(count)
-      .uniq
+            .where(my_module_id: id)
+            .where('activities.id <  ?', last_id)
+            .order(created_at: :desc)
+            .limit(count)
+            .uniq
   end
 
   def protocol
@@ -174,7 +231,7 @@ class MyModule < ActiveRecord::Base
     protocols.count > 0 ? protocols.first : nil
   end
 
-  def first_n_samples(count = 20)
+  def first_n_samples(count = Constants::SEARCH_LIMIT)
     samples.order(name: :asc).limit(count)
   end
 
@@ -228,29 +285,25 @@ class MyModule < ActiveRecord::Base
   end
 
   # Treat this module as root, get all modules of that subtree
-  def get_downstream_modules
+  def downstream_modules
     final = []
     modules = [self]
-    while !modules.empty?
+    until modules.empty?
       my_module = modules.shift
-      if !final.include?(my_module)
-        final << my_module
-      end
-      modules.push(*my_module.my_modules.flatten)
+      final << my_module unless final.include?(my_module)
+      modules.push(*my_module.my_modules)
     end
     final
   end
 
   # Treat this module as inversed root, get all modules of that inversed subtree
-  def get_upstream_modules
+  def upstream_modules
     final = []
     modules = [self]
-    while !modules.empty?
+    until modules.empty?
       my_module = modules.shift
-      if !final.include?(my_module)
-        final << my_module
-      end
-      modules.push(*my_module.my_module_antecessors.flatten)
+      final << my_module unless final.include?(my_module)
+      modules.push(*my_module.my_module_antecessors)
     end
     final
   end
@@ -289,6 +342,31 @@ class MyModule < ActiveRecord::Base
     { data: data, headers: headers }
   end
 
+  # Generate the repository rows belonging to this module
+  # in JSON form, suitable for display in handsontable.js
+  def repository_json_hot(repository_id, order)
+    data = []
+    repository_rows
+      .where(repository_id: repository_id)
+      .order(created_at: order).find_each do |row|
+      row_json = []
+      row_json << row.id
+      row_json << row.name
+      row_json << I18n.l(row.created_at, format: :full)
+      row_json << row.created_by.full_name
+      data << row_json
+    end
+
+    # Prepare column headers
+    headers = [
+      I18n.t('repositories.table.id'),
+      I18n.t('repositories.table.row_name'),
+      I18n.t('repositories.table.added_on'),
+      I18n.t('repositories.table.added_by')
+    ]
+    { data: data, headers: headers }
+  end
+
   def deep_clone(current_user)
     deep_clone_to_experiment(current_user, experiment)
   end
@@ -322,12 +400,6 @@ class MyModule < ActiveRecord::Base
     return clone
   end
 
-  # Writes to user log.
-  def log(message)
-    final = "[%s] %s" % [name, message]
-    experiment.project.log(final)
-  end
-
   # Find an empty position for the restored module. It's
   # basically a first empty row with empty space inside x=[0, 32).
   def get_new_position
@@ -348,6 +420,32 @@ class MyModule < ActiveRecord::Base
 
     # We lucked out, no gaps, therefore we need to add it after the last element
     { x: 0, y: positions.last[1] + HEIGHT }
+  end
+
+  def completed?
+    state == 'completed'
+  end
+
+  # Check if my_module is ready to become completed
+  def check_completness_status
+    if protocol && protocol.steps.count > 0
+      completed = true
+      protocol.steps.find_each do |step|
+        completed = false unless step.completed
+      end
+      return true if completed
+    end
+    false
+  end
+
+  def complete
+    self.state = 'completed'
+    self.completed_on = DateTime.now
+  end
+
+  def uncomplete
+    self.state = 'uncompleted'
+    self.completed_on = nil
   end
 
   private

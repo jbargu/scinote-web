@@ -1,6 +1,6 @@
 <% results.each do |table| %>
   <h5>
-    <span class="glyphicon glyphicon-th"></span>
+    <span class="fas fa-table"></span>
     <%= highlight search_query, search_query.strip.split(/\s+/) %>
   </h5>
 
@@ -20,7 +20,10 @@
         <span>
           <%=t "search.index.module" %>
           <%= render partial: "search/results/partials/my_module_text.html.erb",
-                      locals: { my_module: table.step.protocol.my_module, link_to_page: :results } %>
+                      locals: {
+                        my_module: table.step.protocol.my_module,
+                        link_to_page: :protocols
+                      } %>
         </span>
         <br>
         <span>
@@ -32,7 +35,7 @@
         <span>
           <%=t "search.index.project" %>
           <%= render partial: "search/results/partials/project_text.html.erb",
-                     locals: { project: table.step.protocol.my_module.experiment.project } %>
+                     locals: { project: table.step.protocol.my_module.experiment.project, link_to_page: :show } %>
         </span>
       <% else %>
         <span>
@@ -43,9 +46,9 @@
       <% end %>
       <br>
       <span>
-        <%=t "search.index.organization" %>
-        <%= render partial: "search/results/partials/organization_text.html.erb",
-                   locals: { organization: table.step.protocol.organization } %>
+        <%=t "search.index.team" %>
+        <%= render partial: "search/results/partials/team_text.html.erb",
+                   locals: { team: table.step.protocol.team } %>
       </span>
     <% elsif table.result %>
       <span>
@@ -57,19 +60,25 @@
       <span>
         <%=t "search.index.module" %>
         <%= render partial: "search/results/partials/my_module_text.html.erb",
-                   locals: { my_module: table.result.my_module } %>
+                   locals: { my_module: table.result.my_module, link_to_page: :results } %>
       </span>
+      <br>
+        <span>
+          <%=t "search.index.experiment" %>
+          <%= render partial: "search/results/partials/experiment_text.html.erb",
+                     locals: { experiment: table.result.my_module.experiment } %>
+        </span>
       <br>
       <span>
         <%=t "search.index.project" %>
         <%= render partial: "search/results/partials/project_text.html.erb",
-                   locals: { project: table.result.my_module.experiment.project } %>
+                   locals: { project: table.result.my_module.experiment.project, link_to_page: :show } %>
       </span>
       <br>
       <span>
-        <%=t "search.index.organization" %>
-        <%= render partial: "search/results/partials/organization_text.html.erb",
-                   locals: { organization: table.result.my_module.experiment.project.organization } %>
+        <%=t "search.index.team" %>
+        <%= render partial: "search/results/partials/team_text.html.erb",
+                   locals: { team: table.result.my_module.experiment.project.team } %>
       </span>
     <% end %>
   </p>

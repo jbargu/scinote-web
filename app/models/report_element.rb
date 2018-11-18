@@ -1,22 +1,5 @@
-class ReportElement < ActiveRecord::Base
-  enum type_of: {
-    project_header: 0,
-    my_module: 1,
-    step: 2,
-    result_asset: 3,
-    result_table: 4,
-    result_text: 5,
-    my_module_activity: 6,
-    my_module_samples: 7,
-    step_checklist: 8,
-    step_asset: 9,
-    step_table: 10,
-    step_comments: 11,
-    result_comments: 12,
-    project_activity: 13, # TODO
-    project_samples: 14, # TODO
-    experiment: 15
-  }
+class ReportElement < ApplicationRecord
+  enum type_of: Extends::REPORT_ELEMENT_TYPES
 
   # This is only used by certain elements
   enum sort_order: {
@@ -29,21 +12,26 @@ class ReportElement < ActiveRecord::Base
   validates :type_of, presence: true
   validate :has_one_of_referenced_elements
 
-  belongs_to :report, inverse_of: :report_elements
+  belongs_to :report, inverse_of: :report_elements, optional: true
 
   # Hierarchical structure representation
-  has_many :children, -> { order(:position) }, class_name: "ReportElement", foreign_key: "parent_id", dependent: :destroy
-  belongs_to :parent, class_name: "ReportElement"
+  has_many :children,
+           -> { order(:position) },
+           class_name: 'ReportElement',
+           foreign_key: 'parent_id',
+           dependent: :destroy
+  belongs_to :parent, class_name: 'ReportElement', optional: true
 
   # References to various report entities
-  belongs_to :project, inverse_of: :report_elements
-  belongs_to :experiment, inverse_of: :report_elements
-  belongs_to :my_module, inverse_of: :report_elements
-  belongs_to :step, inverse_of: :report_elements
-  belongs_to :result, inverse_of: :report_elements
-  belongs_to :checklist, inverse_of: :report_elements
-  belongs_to :asset, inverse_of: :report_elements
-  belongs_to :table, inverse_of: :report_elements
+  belongs_to :project, inverse_of: :report_elements, optional: true
+  belongs_to :experiment, inverse_of: :report_elements, optional: true
+  belongs_to :my_module, inverse_of: :report_elements, optional: true
+  belongs_to :step, inverse_of: :report_elements, optional: true
+  belongs_to :result, inverse_of: :report_elements, optional: true
+  belongs_to :checklist, inverse_of: :report_elements, optional: true
+  belongs_to :asset, inverse_of: :report_elements, optional: true
+  belongs_to :table, inverse_of: :report_elements, optional: true
+  belongs_to :repository, inverse_of: :report_elements, optional: true
 
   def has_children?
     children.length > 0
@@ -57,61 +45,45 @@ class ReportElement < ActiveRecord::Base
     step_comments? or result_comments?
   end
 
-  # Get the referenced element (previously, element's type_of must be set)
-  def element_reference
-    if project_header? or project_activity? or project_samples?
-      return project
-    elsif experiment?
-      return experiment
-    elsif my_module? or my_module_activity? or my_module_samples?
-      return my_module
-    elsif step? or step_comments?
-      return step
-    elsif result_asset? or result_table? or result_text? or result_comments?
-      return result
-    elsif step_checklist?
-      return checklist
-    elsif step_asset?
-      return asset
-    elsif step_table?
-      return table
+  # Get the referenced elements (previously, element's type_of must be set)
+  def element_references
+    ReportExtends::ELEMENT_REFERENCES.each do |el_ref|
+      if el_ref.check(self)
+        return el_ref.elements.map { |el| eval(el.gsub('_id', '')) }
+      end
     end
   end
 
-
-  # Set the element reference (previously, element's type_of must be set)
-  def set_element_reference(ref_id)
-    if project_header? or project_activity? or project_samples?
-      self.project_id = ref_id
-    elsif experiment?
-      self.experiment_id = ref_id
-    elsif my_module? or my_module_activity? or my_module_samples?
-      self.my_module_id = ref_id
-    elsif step? or step_comments?
-      self.step_id = ref_id
-    elsif result_asset? or result_table? or result_text? or result_comments?
-      self.result_id = ref_id
-    elsif step_checklist?
-      self.checklist_id = ref_id
-    elsif step_asset?
-      self.asset_id = ref_id
-    elsif step_table?
-      self.table_id = ref_id
+  # Set the element references (previously, element's type_of must be set)
+  def set_element_references(ref_ids)
+    ReportExtends::SET_ELEMENT_REFERENCES_LIST.each do |el_ref|
+      check = el_ref.check(self)
+      next unless check
+      el_ref.elements.each do |element|
+        public_send("#{element}=", ref_ids[element])
+      end
+      break
     end
   end
 
   # removes element that are archived or deleted
   def clean_removed_or_archived_elements
     parent_model = ''
-    %w(project experiment my_module step result checklist asset table)
+    %w(project
+       experiment
+       my_module
+       step
+       result
+       checklist
+       asset
+       table
+       repository)
       .each do |el|
       parent_model = el if send el
     end
 
     if parent_model == 'experiment'
       destroy unless send(parent_model).project == report.project
-    elsif parent_model == 'step'
-      destroy unless send(parent_model).completed
     else
       destroy unless (send(parent_model).active? rescue send(parent_model))
     end
@@ -120,18 +92,11 @@ class ReportElement < ActiveRecord::Base
   private
 
   def has_one_of_referenced_elements
-    num_of_refs = [
-      project,
-      experiment,
-      my_module,
-      step,
-      result,
-      checklist,
-      asset,
-      table
-    ].count { |r| r.present? }
-    if num_of_refs != 1
-      errors.add(:base, "Report element must have exactly one element reference.")
+    element_references.each do |el|
+      next unless el.nil?
+      errors.add(:base,
+                 'Report element doesn\'t have correct element references.')
+      break
     end
   end
 end

@@ -1,6 +1,6 @@
 <% results.each do |step| %>
   <h5>
-    <span class="glyphicon glyphicon-circle-arrow-right"></span>
+    <span class="fas fa-arrow-circle-right"></span>
     <%= render partial: "search/results/partials/step_text.html.erb", locals: { step: step, query: search_query, target: nil } %>
   </h5>
 
@@ -35,7 +35,7 @@
       <span>
         <%=t "search.index.project" %>
         <%= render partial: "search/results/partials/project_text.html.erb",
-                   locals: { project: step.protocol.my_module.experiment.project } %>
+                   locals: { project: step.protocol.my_module.experiment.project, link_to_page: :show } %>
       </span>
     <% else %>
       <span>
@@ -46,12 +46,11 @@
     <% end %>
     <br>
     <span>
-      <%=t "search.index.organization" %>
-      <%= render partial: "search/results/partials/organization_text.html.erb",
-                 locals: { organization: step.protocol.organization } %>
+      <%=t "search.index.team" %>
+      <%= render partial: "search/results/partials/team_text.html.erb",
+                 locals: { team: step.protocol.team } %>
     </span>
   </p>
 
   <hr>
 <% end %>
-

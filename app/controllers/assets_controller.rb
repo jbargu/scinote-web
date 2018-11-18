@@ -1,56 +1,92 @@
 class AssetsController < ApplicationController
-  before_action :load_vars, except: [:signature]
-  before_action :check_read_permission, except: [:signature, :file_present]
+  include WopiUtil
+  # include ActionView::Helpers
+  include ActionView::Helpers::AssetTagHelper
+  include ActionView::Helpers::TextHelper
+  include ActionView::Helpers::UrlHelper
+  include ActionView::Context
+  include InputSanitizeHelper
+  include FileIconsHelper
 
-  # Validates asset and then generates S3 upload posts, because
-  # otherwise untracked files could be uploaded to S3
-  def signature
-    respond_to do |format|
-      format.json {
-        asset = Asset.new(asset_params)
-        if asset.errors.any?
-          render json: {
-            status: 'error',
-            errors: asset.errors
-          }, status: :bad_request
-        else
-          posts = generate_upload_posts asset
-          render json: {
-            posts: posts
-          }
-        end
-      }
-    end
-  end
+  before_action :load_vars
+  before_action :check_read_permission, except: :file_present
+  before_action :check_edit_permission, only: :edit
 
   def file_present
     respond_to do |format|
-      format.json {
-        if @asset.file_present
+      format.json do
+        if @asset.file.processing?
+          render json: {}, status: 404
+        else
           # Only if file is present,
           # check_read_permission
           check_read_permission
 
           # If check_read_permission already rendered error,
           # stop execution
-          if performed? then
-            return
-          end
+          return if performed?
 
           # If check permission passes, return :ok
-          render json: {}, status: 200
-        else
-          render json: {}, status: 404
+          render json: {
+            'asset-id' => @asset.id,
+            'image-tag-url' => @asset.url(:medium),
+            'preview-url' => asset_file_preview_path(@asset),
+            'filename' => truncate(@asset.file_file_name,
+                                   length:
+                                     Constants::FILENAME_TRUNCATION_LENGTH),
+            'download-url' => download_asset_path(@asset),
+            'type' => asset_data_type(@asset)
+          }, status: 200
         end
-      }
+      end
     end
   end
 
-  def preview
+  def file_preview
+    response_json = {
+      'type' => (@asset.is_image? ? 'image' : 'file'),
+
+      'filename' => truncate(@asset.file_file_name,
+                             length:
+                               Constants::FILENAME_TRUNCATION_LENGTH),
+      'download-url' => download_asset_path(@asset)
+    }
+
     if @asset.is_image?
-      redirect_to @asset.presigned_url(:medium), status: 307
+      response_json.merge!(
+        'processing'        => @asset.file.processing?,
+        'large-preview-url' => @asset.url(:large),
+        'processing-url'    => image_tag('medium/processing.gif')
+      )
     else
-      render_400
+      response_json.merge!(
+        'processing'   => @asset.file.processing?,
+        'preview-icon' => render_to_string(
+          partial: 'shared/file_preview_icon.html.erb',
+          locals: { asset: @asset }
+        )
+      )
+    end
+
+    if wopi_file?(@asset)
+      can_edit =
+        if @assoc.class == Step
+          can_manage_protocol_in_module?(@protocol) ||
+            can_manage_protocol_in_repository?(@protocol)
+        elsif @assoc.class == Result
+          can_manage_module?(@my_module)
+        elsif @assoc.class == RepositoryCell
+          can_manage_repository_rows?(@repository.team)
+        end
+      response_json['wopi-controls'] = render_to_string(
+        partial: 'shared/file_wopi_controlls.html.erb',
+        locals: { asset: @asset, can_edit: can_edit }
+      )
+    end
+    respond_to do |format|
+      format.json do
+        render json: response_json
+      end
     end
   end
 
@@ -65,80 +101,91 @@ class AssetsController < ApplicationController
     end
   end
 
+  def edit
+    @action_url = append_wd_params(@asset
+                                   .get_action_url(current_user, 'edit', false))
+    @favicon_url = @asset.favicon_url('edit')
+    tkn = current_user.get_wopi_token
+    @token = tkn.token
+    @ttl = (tkn.ttl * 1000).to_s
+    create_wopi_file_activity(current_user, true)
+
+    render layout: false
+  end
+
+  def view
+    @action_url = append_wd_params(@asset
+                                   .get_action_url(current_user, 'view', false))
+    @favicon_url = @asset.favicon_url('view')
+    tkn = current_user.get_wopi_token
+    @token = tkn.token
+    @ttl = (tkn.ttl * 1000).to_s
+
+    render layout: false
+  end
+
   private
 
   def load_vars
     @asset = Asset.find_by_id(params[:id])
-
-    unless @asset
-      render_404
-    end
+    return render_404 unless @asset
 
     step_assoc = @asset.step
     result_assoc = @asset.result
-
-    @assoc = step_assoc if not step_assoc.nil?
-    @assoc = result_assoc if not result_assoc.nil?
+    repository_cell_assoc = @asset.repository_cell
+    @assoc = step_assoc unless step_assoc.nil?
+    @assoc = result_assoc unless result_assoc.nil?
+    @assoc = repository_cell_assoc unless repository_cell_assoc.nil?
 
     if @assoc.class == Step
       @protocol = @asset.step.protocol
-    else
+    elsif @assoc.class == Result
       @my_module = @assoc.my_module
+    elsif @assoc.class == RepositoryCell
+      @repository = @assoc.repository_column.repository
     end
   end
 
   def check_read_permission
     if @assoc.class == Step
-      unless can_view_or_download_step_assets(@protocol)
-        render_403 and return
-      end
+      render_403 && return unless can_read_protocol_in_module?(@protocol) ||
+                                  can_read_protocol_in_repository?(@protocol)
     elsif @assoc.class == Result
-      unless can_view_or_download_result_assets(@my_module)
-        render_403 and return
-      end
+      render_403 and return unless can_read_experiment?(@my_module.experiment)
+    elsif @assoc.class == RepositoryCell
+      render_403 and return unless can_read_team?(@repository.team)
     end
   end
 
-  def generate_upload_posts(asset)
-    posts = []
-    s3_post = S3_BUCKET.presigned_post(
-      key: asset.file.path[1..-1],
-      success_action_status: '201',
-      acl: 'private',
-      storage_class: "STANDARD",
-      content_length_range: 1..(FILE_SIZE_LIMIT.megabytes),
-      content_type: asset.file_content_type
-    )
-    posts.push({
-      url: s3_post.url,
-      fields: s3_post.fields
-    })
-
-    if (asset.file_content_type =~ /^image\//) == 0
-      asset.file.options[:styles].each do |style, option|
-        s3_post = S3_BUCKET.presigned_post(
-          key: asset.file.path(style)[1..-1],
-          success_action_status: '201',
-          acl: 'public-read',
-          storage_class: "REDUCED_REDUNDANCY",
-          content_length_range: 1..(FILE_SIZE_LIMIT.megabytes),
-          content_type: asset.file_content_type
-        )
-        posts.push({
-          url: s3_post.url,
-          fields: s3_post.fields,
-          style_option: option,
-          mime_type: asset.file_content_type
-        })
-      end
+  def check_edit_permission
+    if @assoc.class == Step
+      render_403 && return unless can_manage_protocol_in_module?(@protocol) ||
+                                  can_manage_protocol_in_repository?(@protocol)
+    elsif @assoc.class == Result
+      render_403 and return unless can_manage_module?(@my_module)
+    elsif @assoc.class == RepositoryCell
+      render_403 and return unless can_manage_repository_rows?(@repository.team)
     end
+  end
 
-    posts
+  def append_wd_params(url)
+    wd_params = ''
+    params.keys.select { |i| i[/^wd.*/] }.each do |wd|
+      next if wd == 'wdPreviousSession' || wd == 'wdPreviousCorrelation'
+      wd_params += "&#{wd}=#{params[wd]}"
+    end
+    url + wd_params
   end
 
   def asset_params
     params.permit(
       :file
     )
+  end
+
+  def asset_data_type(asset)
+    return 'wopi' if wopi_file?(asset)
+    return 'image' if asset.is_image?
+    'file'
   end
 end

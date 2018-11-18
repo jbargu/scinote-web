@@ -1,0 +1,30 @@
+<% provide(:head_title, t("libraries.index.head_title")) %>
+<% provide(:container_class, "no-second-nav-container") %>
+
+<% if current_team %>
+  <%= render partial: "sidebar", locals: { repositories: @repositories } %>
+  <%
+    # show only if no repositories present. If the team will have them we will
+    # handle this in left side navigation bar
+  %>
+  <div class="content-pane">
+    <div class="jumbotron text-center" style="margin-top:12%">
+      <strong><%=t 'libraries.index.no_libraries.text' %></strong>
+      <% if can_create_repositories?(current_team) %>
+        <h2><strong><%=t 'libraries.index.no_libraries.title' %><strong></h2>
+        <br />
+        <a class="btn btn-primary btn-lg"
+           id="create-new-repository"
+           data-remote="true"
+           href="<%= create_modal_team_repositories_path(current_team) %>">
+          <span class="fas fa-plus"></span>
+          <span class="hidden-xs"><%= t('libraries.index.no_libraries.create_new_button') %></span>
+        </a>
+      <% else %>
+        <p><strong><%=t 'libraries.index.no_libraries.no_permission_title' %></strong></p>
+      <% end %>
+    </div>
+  </div>
+<% end %>
+
+<%= javascript_include_tag "repositories/index" %>

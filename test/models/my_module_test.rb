@@ -10,6 +10,10 @@ class MyModuleTest < ActiveSupport::TestCase
     @my_module = my_modules(:list_of_samples)
   end
 
+  should validate_length_of(:name)
+    .is_at_least(Constants::NAME_MIN_LENGTH)
+    .is_at_most(Constants::NAME_MAX_LENGTH)
+
   test "should validate valid module object" do
     assert @my_module.valid?
   end
@@ -18,16 +22,6 @@ class MyModuleTest < ActiveSupport::TestCase
     @my_module.name = ""
     assert_not @my_module.valid?
     @my_module.name = nil
-    assert_not @my_module.valid?
-  end
-
-  test "should not validate too short name" do
-    @my_module.name = "n"
-    assert_not @my_module.valid?
-  end
-
-  test "should not validate too long name" do
-    @my_module.name = "n" * 51
     assert_not @my_module.valid?
   end
 
@@ -146,12 +140,5 @@ class MyModuleTest < ActiveSupport::TestCase
 
   test "should deep clone module" do
     skip
-  end
-
-  test "should save log message" do
-    message = "This is test message for my module"
-    @my_module.log(message)
-    log_message = Log.last.message
-    assert_equal log_message[57..-1], message
   end
 end

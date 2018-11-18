@@ -1,5 +1,10 @@
 class Users::RegistrationsController < Devise::RegistrationsController
-  before_action :load_paperclip_vars
+  prepend_before_action :check_captcha, only: [:create]
+  before_action :registration_enabled?,
+                only: %i(new create new_with_provider create_with_provider)
+  before_action :sign_up_with_provider_enabled?,
+                only: %i(new_with_provider create_with_provider)
+  layout :layout
 
   def avatar
     user = User.find_by_id(params[:id]) || current_user
@@ -41,15 +46,6 @@ class Users::RegistrationsController < Devise::RegistrationsController
 
   def update_resource(resource, params)
     @user_avatar_url = avatar_path(current_user, :thumb)
-
-    if @direct_upload
-      if params.include? :avatar_file_name
-        file_name = params[:avatar_file_name]
-        file_ext = file_name.split(".").last
-        params[:avatar_content_type] = Rack::Mime.mime_type(".#{file_ext}")
-        resource.avatar.destroy
-      end
-    end
 
     if params.include? :change_password
       # Special handling if changing password
@@ -95,6 +91,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
       prev_unconfirmed_email = resource.unconfirmed_email if resource.respond_to?(:unconfirmed_email)
 
       resource_updated = update_resource(resource, account_update_params)
+
       yield resource if block_given?
       if resource_updated
         # Set "needs confirmation" flash if neccesary
@@ -130,46 +127,85 @@ class Users::RegistrationsController < Devise::RegistrationsController
     end
   end
 
+  def new; end
+
   def create
-
-    # Create new organization for the new user
-    @org = Organization.new
-    @org.name = params[:organization][:name]
-
     build_resource(sign_up_params)
-
-    valid_org = @org.valid?
     valid_resource = resource.valid?
+    # ugly checking if new team on sign up is enabled :(
+    if Rails.configuration.x.new_team_on_signup
+      # Create new team for the new user
+      @team = Team.new
+      @team.name = params[:team][:name]
+      valid_team = @team.valid?
 
-    if valid_org and valid_resource
+      if valid_team && valid_resource
+        # this must be called after @team variable is defined. Otherwise this
+        # variable won't be accessable in view.
+        super do |resource|
+          # Set the confirmed_at == created_at IF not using email confirmations
+          unless Rails.configuration.x.enable_email_confirmations
+            resource.update(confirmed_at: resource.created_at)
+          end
 
-      # this must be called after @org variable is defined. Otherwise this
-      # variable won't be accessable in view.
+          if resource.valid? && resource.persisted?
+            @team.created_by = resource # set created_by for oraganization
+            @team.save
+
+            # Add this user to the team as owner
+            UserTeam.create(user: resource, team: @team, role: :admin)
+
+            # set current team to new user
+            resource.current_team_id = @team.id
+            resource.save
+          end
+        end
+      else
+        render :new
+      end
+    elsif valid_resource
       super do |resource|
-
-        if resource.valid? and resource.persisted?
-          @org.created_by = resource  #set created_by for oraganization
-          @org.save
-
-          # Add this user to the organization as owner
-          UserOrganization.create(
-            user: resource,
-            organization: @org,
-            role: :admin
-          )
+        # Set the confirmed_at == created_at IF not using email confirmations
+        unless Rails.configuration.x.enable_email_confirmations
+          resource.update(confirmed_at: resource.created_at)
+          resource.save
         end
       end
-
     else
       render :new
     end
   end
 
-  protected
+  def new_with_provider; end
 
-  def load_paperclip_vars
-    @direct_upload = ENV['PAPERCLIP_DIRECT_UPLOAD'] == "true"
+  def create_with_provider
+    @user = User.find_by_id(user_provider_params['user'])
+    # Create new team for the new user
+    @team = Team.new(team_provider_params)
+
+    if @team.valid? && @user && Rails.configuration.x.new_team_on_signup
+      # Set the confirmed_at == created_at IF not using email confirmations
+      unless Rails.configuration.x.enable_email_confirmations
+        @user.update!(confirmed_at: @user.created_at)
+      end
+
+      @team.created_by = @user # set created_by for team
+      @team.save!
+
+      # Add this user to the team as owner
+      UserTeam.create(user: @user, team: @team, role: :admin)
+
+      # set current team to new user
+      @user.current_team_id = @team.id
+      @user.save!
+
+      sign_in_and_redirect @user
+    else
+      render :new_with_provider
+    end
   end
+
+  protected
 
   # Called upon creating User (before .save). Permits parameters and extracts
   # initials from :full_name (takes at most 4 chars). If :full_name is empty, it
@@ -178,8 +214,20 @@ class Users::RegistrationsController < Devise::RegistrationsController
   def sign_up_params
     tmp = params.require(:user).permit(:full_name, :initials, :email, :password, :password_confirmation)
     initials = tmp[:full_name].titleize.scan(/[A-Z]+/).join()
-    initials = initials.strip.empty? ? "PLCH" : initials[0..3]
+    initials = if initials.strip.empty?
+                 'PLCH'
+               else
+                 initials[0..Constants::USER_INITIALS_MAX_LENGTH]
+               end
     tmp.merge(:initials => initials)
+  end
+
+  def team_provider_params
+    params.require(:team).permit(:name)
+  end
+
+  def user_provider_params
+    params.permit(:user)
   end
 
   def account_update_params
@@ -228,7 +276,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
         success_action_status: '201',
         acl: 'public-read',
         storage_class: "REDUCED_REDUNDANCY",
-        content_length_range: 1..(FILE_SIZE_LIMIT.megabytes),
+        content_length_range: 1..Rails.configuration.x.file_max_size_mb.megabytes,
         content_type: content_type
       )
       posts.push({
@@ -243,6 +291,33 @@ class Users::RegistrationsController < Devise::RegistrationsController
   end
 
   private
+
+  def layout
+    'fluid' if action_name == 'edit'
+  end
+
+  def check_captcha
+    if Rails.configuration.x.enable_recaptcha
+      unless verify_recaptcha
+        # Construct new resource before rendering :new
+        self.resource = resource_class.new sign_up_params
+
+        # Also validate team
+        @team = Team.new(name: params[:team][:name])
+        @team.valid?
+
+        respond_with_navigational(resource) { render :new }
+      end
+    end
+  end
+
+  def registration_enabled?
+    render_403 unless Rails.configuration.x.enable_user_registration
+  end
+
+  def sign_up_with_provider_enabled?
+    render_403 unless Rails.configuration.x.linkedin_signin_enabled
+  end
 
   # Redirect to login page after signing up
   def after_sign_up_path_for(resource)

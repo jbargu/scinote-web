@@ -1,5 +1,17 @@
 Rails.application.configure do
+
   # Settings specified here will take precedence over those in config/application.rb.
+  config.after_initialize do
+    Bullet.enable        = true
+    Bullet.bullet_logger = true
+    Bullet.raise         = true # raise an error if n+1 query occurs
+  end
+
+  # Configure public file server for tests with Cache-Control for performance.
+  config.public_file_server.enabled = true
+  config.public_file_server.headers = {
+    'Cache-Control' => "public, max-age=#{1.hour.seconds.to_i}"
+  }
 
   # Enable this to be able to output stuff to STDOUT during tests
   # via Rails::logger.info "..."
@@ -36,6 +48,10 @@ Rails.application.configure do
   # ActionMailer::Base.deliveries array.
   config.action_mailer.delivery_method = :test
 
+  Rails.application.routes.default_url_options = {
+    host: Rails.application.secrets.mail_server_url
+  }
+
   # Don't care if the mailer can't send.
   config.action_mailer.default_url_options = { host: Rails.application.secrets.mail_server_url }
   config.action_mailer.default_options = { from: Rails.application.secrets.mail_from }
@@ -46,7 +62,7 @@ Rails.application.configure do
     address: Rails.application.secrets.mailer_address,
     port: Rails.application.secrets.mailer_port,
     domain: Rails.application.secrets.mailer_domain,
-    authentication: "plain",
+    authentication: Rails.application.secrets.mailer_authentication,
     enable_starttls_auto: true,
     user_name: Rails.application.secrets.mailer_user_name,
     password: Rails.application.secrets.mailer_password
@@ -65,7 +81,21 @@ Rails.application.configure do
   # Raises error for missing translations
   # config.action_view.raise_on_missing_translations = true
 
-  # Enable first-time tutorial for users signing in the sciNote for
-  # the first time.
-  config.x.enable_tutorial = false
+  # Enable/disable Deface
+  config.deface.enabled = ENV['DEFACE_ENABLED'] != 'false'
+
+  # Enable reCAPTCHA
+  config.x.enable_recaptcha = false
+
+  # Enable email confirmations
+  config.x.enable_email_confirmations = false
+
+  # Enable user registrations
+  config.x.enable_user_registration = true
+
+  # disable sign in with LinkedIn account
+  config.x.linkedin_signin_enabled = false
+
+  # enable assets compiling
+  config.assets.compile = true
 end

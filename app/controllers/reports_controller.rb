@@ -1,66 +1,49 @@
 class ReportsController < ApplicationController
+  include TeamsHelper
+  include ReportActions
   # Ignore CSRF protection just for PDF generation (because it's
   # used via target='_blank')
-  protect_from_forgery with: :exception, :except => :generate
+  protect_from_forgery with: :exception, except: :generate
 
-  before_action :load_vars, only: [
-    :edit,
-    :update
-  ]
-  before_action :load_vars_nested, only: [
-    :index,
-    :new,
-    :create,
-    :edit,
-    :update,
-    :generate,
-    :destroy,
-    :save_modal,
-    :project_contents_modal,
-    :experiment_contents_modal,
-    :module_contents_modal,
-    :step_contents_modal,
-    :result_contents_modal,
-    :project_contents,
-    :module_contents,
-    :step_contents,
-    :result_contents
-  ]
+  BEFORE_ACTION_METHODS = %i(
+    new
+    create
+    edit
+    update
+    generate
+    save_modal
+    project_contents_modal
+    experiment_contents_modal
+    module_contents_modal
+    step_contents_modal
+    result_contents_modal
+    project_contents
+    module_contents
+    step_contents
+    result_contents
+  ).freeze
 
-  before_action :check_view_permissions, only: [:index]
-  before_action :check_create_permissions, only: [
-    :new,
-    :create,
-    :edit,
-    :update,
-    :generate,
-    :save_modal,
-    :project_contents_modal,
-    :experiment_contents_modal,
-    :module_contents_modal,
-    :step_contents_modal,
-    :result_contents_modal,
-    :project_contents,
-    :module_contents,
-    :step_contents,
-    :result_contents
-  ]
-  before_action :check_destroy_permissions, only: [:destroy]
+  before_action :load_vars, only: %i(edit update)
+  before_action :load_vars_nested, only: BEFORE_ACTION_METHODS
+  before_action :load_visible_projects, only: %i(index visible_projects)
+  before_action :load_available_repositories,
+                only: %i(new edit available_repositories)
 
-  layout "fluid"
-
-  # Initialize markdown parser
-  def load_markdown
-    @markdown = Redcarpet::Markdown.new(
-      Redcarpet::Render::HTML.new(
-        filter_html: true,
-        no_images: true
-      )
-    )
-  end
+  before_action :check_manage_permissions, only: BEFORE_ACTION_METHODS
 
   # Index showing all reports of a single project
-  def index
+  def index; end
+
+  def datatable
+    respond_to do |format|
+      format.json do
+        render json: ::ReportDatatable.new(
+          view_context,
+          current_user,
+          current_team.datatables_reports.visible_by(current_user, current_team)
+        )
+      end
+    end
   end
 
   # Report grouped by modules
@@ -80,28 +63,40 @@ class ReportsController < ApplicationController
     @report = Report.new(report_params)
     @report.project = @project
     @report.user = current_user
+    @report.team = current_team
     @report.last_modified_by = current_user
 
-    if continue and @report.save_with_contents(report_contents)
+    if continue && @report.save_with_contents(report_contents)
+      # record an activity
+      Activity.create(
+        type_of: :create_report,
+        project: @report.project,
+        user: current_user,
+        message: I18n.t(
+          'activities.create_report',
+          user: current_user.full_name,
+          report: @report.name
+        )
+      )
       respond_to do |format|
-        format.json {
-          render json: { url: project_reports_path(@project) }, status: :ok
-        }
+        format.json do
+          render json: { url: reports_path }, status: :ok
+        end
       end
     else
       respond_to do |format|
-        format.json {
+        format.json do
           render json: @report.errors, status: :unprocessable_entity
-        }
+        end
       end
     end
   end
 
   def edit
     # cleans all the deleted report
+    current_team_switch(@report.project.team)
     @report.cleanup_report
-    load_markdown
-    render "reports/new.html.erb"
+    render 'reports/new.html.erb'
   end
 
   # Updating existing report from the _save modal of the new page
@@ -116,27 +111,34 @@ class ReportsController < ApplicationController
     @report.last_modified_by = current_user
     @report.assign_attributes(report_params)
 
-    if continue and @report.save_with_contents(report_contents)
+    if continue && @report.save_with_contents(report_contents)
+      # record an activity
+      Activity.create(
+        type_of: :edit_report,
+        project: @report.project,
+        user: current_user,
+        message: I18n.t(
+          'activities.edit_report',
+          user: current_user.full_name,
+          report: @report.name
+        )
+      )
       respond_to do |format|
-        format.json {
-          render json: { url: project_reports_path(@project) }, status: :ok
-        }
+        format.json do
+          render json: { url: reports_path }, status: :ok
+        end
       end
     else
       respond_to do |format|
-        format.json {
+        format.json do
           render json: @report.errors, status: :unprocessable_entity
-        }
+        end
       end
     end
   end
 
   # Destroy multiple entries action
   def destroy
-    unless params.include? :report_ids
-      render_404
-    end
-
     begin
       report_ids = JSON.parse(params[:report_ids])
     rescue
@@ -145,29 +147,59 @@ class ReportsController < ApplicationController
 
     report_ids.each do |report_id|
       report = Report.find_by_id(report_id)
-
-      if report.present?
-        report.destroy
-      end
+      next unless report.present? && can_manage_reports?(current_team)
+      # record an activity
+      Activity.create(
+        type_of: :delete_report,
+        project: report.project,
+        user: current_user,
+        message: I18n.t(
+          'activities.delete_report',
+          user: current_user.full_name,
+          report: report.name
+        )
+      )
+      report.destroy
     end
 
-    redirect_to project_reports_path(@project)
+    redirect_to reports_path
   end
 
   # Generation action
   # Currently, only .PDF is supported
   def generate
+    content = params[:html]
+    content = I18n.t('projects.reports.new.no_content_for_PDF_html') if content.blank?
     respond_to do |format|
-      format.pdf {
-        @html = params[:html]
-        if @html.blank? then
-          @html = "<h1>No content</h1>"
-        end
-        render pdf: "report",
-          header: { right: '[page] of [topage]' },
-          template: "reports/report.pdf.erb"
-      }
+      format.pdf do
+        render pdf: 'report', header: { right: '[page] of [topage]' },
+                              locals: { content: content },
+                              template: 'reports/report.pdf.erb',
+                              disable_javascript: true
+      end
     end
+  end
+
+  def save_pdf_to_inventory_item
+    save_pdf_to_inventory_item = ReportActions::SavePdfToInventoryItem.new(
+      current_user, current_team, save_PDF_params
+    )
+    if save_pdf_to_inventory_item.save
+      render json: {
+        message: I18n.t(
+          'projects.reports.new.save_PDF_to_inventory_modal.success_flash'
+        )
+      }, status: :ok
+    else
+      render json: { message: save_pdf_to_inventory_item.error_messages },
+             status: :unprocessable_entity
+    end
+  rescue ReportActions::RepositoryPermissionError => error
+    render json: { message: error },
+           status: :forbidden
+  rescue Exception => error
+    render json: { message: error.message },
+           status: :internal_server_error
   end
 
   # Modal for saving the existsing/new report
@@ -185,39 +217,38 @@ class ReportsController < ApplicationController
       @url = project_report_path(@project, @report, format: :json)
     end
 
-    if !params.include? :contents
-      render_403 and return
-    end
+    render_403 and return unless params.include? :contents
+
     @report_contents = params[:contents]
 
     respond_to do |format|
-      format.json {
+      format.json do
         render json: {
-          html: render_to_string({
-            partial: "reports/new/modal/save.html.erb"
-          })
+          html: render_to_string(
+            partial: 'reports/new/modal/save.html.erb'
+          )
         }
-      }
+      end
     end
   end
 
   # Modal for adding contents into project element
   def project_contents_modal
     respond_to do |format|
-      format.json {
+      format.json do
         render json: {
-          html: render_to_string({
-            partial: "reports/new/modal/project_contents.html.erb",
+          html: render_to_string(
+            partial: 'reports/new/modal/project_contents.html.erb',
             locals: { project: @project }
-            })
+          )
         }
-      }
+      end
     end
   end
 
   # Experiment for adding contents into experiment element
   def experiment_contents_modal
-    experiment = Experiment.find_by_id(params[:id])
+    experiment = Experiment.find_by_id(params[:experiment_id])
 
     respond_to do |format|
       if experiment.blank?
@@ -239,7 +270,7 @@ class ReportsController < ApplicationController
 
   # Modal for adding contents into module element
   def module_contents_modal
-    my_module = MyModule.find_by_id(params[:id])
+    my_module = MyModule.find_by_id(params[:my_module_id])
 
     respond_to do |format|
       if my_module.blank?
@@ -250,7 +281,7 @@ class ReportsController < ApplicationController
         format.json do
           render json: {
             html: render_to_string(
-              partial: "reports/new/modal/module_contents.html.erb",
+              partial: 'reports/new/modal/module_contents.html.erb',
               locals: { project: @project, my_module: my_module }
             )
           }
@@ -261,44 +292,44 @@ class ReportsController < ApplicationController
 
   # Modal for adding contents into step element
   def step_contents_modal
-    step = Step.find_by_id(params[:id])
+    step = Step.find_by_id(params[:step_id])
 
     respond_to do |format|
       if step.blank?
-        format.json {
+        format.json do
           render json: {}, status: :not_found
-        }
+        end
       else
-        format.json {
+        format.json do
           render json: {
-            html: render_to_string({
-              partial: "reports/new/modal/step_contents.html.erb",
+            html: render_to_string(
+              partial: 'reports/new/modal/step_contents.html.erb',
               locals: { project: @project, step: step }
-            })
+            )
           }
-        }
+        end
       end
     end
   end
 
   # Modal for adding contents into result element
   def result_contents_modal
-    result = Result.find_by_id(params[:id])
+    result = Result.find_by_id(params[:result_id])
 
     respond_to do |format|
       if result.blank?
-        format.json {
+        format.json do
           render json: {}, status: :not_found
-        }
+        end
       else
-        format.json {
+        format.json do
           render json: {
-            html: render_to_string({
-              partial: "reports/new/modal/result_contents.html.erb",
+            html: render_to_string(
+              partial: 'reports/new/modal/result_contents.html.erb',
               locals: { project: @project, result: result }
-            })
+            )
           }
-        }
+        end
       end
     end
   end
@@ -360,12 +391,12 @@ class ReportsController < ApplicationController
         if elements_empty? elements
           format.json { render json: {}, status: :no_content }
         else
-          format.json {
+          format.json do
             render json: {
               status: :ok,
               elements: elements
             }
-          }
+          end
         end
       end
     end
@@ -396,6 +427,7 @@ class ReportsController < ApplicationController
 
   def result_contents
     result = Result.find_by_id(params[:id])
+
     respond_to do |format|
       if result.blank?
         format.json { render json: {}, status: :not_found }
@@ -416,245 +448,69 @@ class ReportsController < ApplicationController
     end
   end
 
+  def visible_projects
+    render json: { projects: @visible_projects }, status: :ok
+  end
+
+  def available_repositories
+    render json: { results: @available_repositories }, status: :ok
+  end
+
   private
 
-  def in_params?(val)
-    params.include? val and params[val] == "1"
-  end
-
-  def generate_new_el(hide)
-    el = {}
-    el[:html] = render_to_string({
-        partial: "reports/elements/new_element.html.erb",
-        locals: { hide: hide }
-      })
-    el[:children] = []
-    el[:new_element] = true
-    el
-  end
-
-  def generate_el(partial, locals)
-    el = {}
-    el[:html] = render_to_string({
-      partial: partial,
-      locals: locals
-    })
-    el[:children] = []
-    el[:new_element] = false
-    el
-  end
-
-  def generate_project_contents_json
-    res = []
-    if params.include? :modules
-      modules = (params[:modules].select { |_, p| p == '1' })
-                .keys
-                .collect(&:to_i)
-
-      # Get unique experiments from given modules
-      experiments = MyModule.where(id: modules).map(&:experiment).uniq
-      experiments.each do |experiment|
-        res << generate_new_el(false)
-        el = generate_el(
-          'reports/elements/experiment_element.html.erb',
-          experiment: experiment
-        )
-        el[:children] = generate_experiment_contents_json(experiment, modules)
-        res << el
-      end
-    end
-    res << generate_new_el(false)
-    res
-  end
-
-  def generate_experiment_contents_json(experiment, selected_modules)
-    res = []
-    experiment.my_modules.each do |my_module|
-      next unless selected_modules.include?(my_module.id)
-
-      res << generate_new_el(false)
-      el = generate_el(
-        'reports/elements/my_module_element.html.erb',
-        my_module: my_module
-      )
-      el[:children] = generate_module_contents_json(my_module)
-      res << el
-    end
-    res << generate_new_el(false)
-    res
-  end
-
-  def generate_module_contents_json(my_module)
-    res = []
-    if (in_params? :module_steps) && my_module.protocol.present? then
-      my_module.protocol.completed_steps.each do |step|
-        res << generate_new_el(false)
-        el = generate_el(
-          "reports/elements/step_element.html.erb",
-          { step: step }
-        )
-        el[:children] = generate_step_contents_json(step)
-        res << el
-      end
-    end
-    if in_params? :module_result_assets then
-      (my_module.results.select { |r| r.is_asset && r.active? }).each do |result_asset|
-        res << generate_new_el(false)
-        el = generate_el(
-          "reports/elements/result_asset_element.html.erb",
-          { result: result_asset }
-        )
-        el[:children] = generate_result_contents_json(result_asset)
-        res << el
-      end
-    end
-    if in_params? :module_result_tables then
-      (my_module.results.select { |r| r.is_table && r.active? }).each do |result_table|
-        res << generate_new_el(false)
-        el = generate_el(
-          "reports/elements/result_table_element.html.erb",
-          { result: result_table }
-        )
-        el[:children] = generate_result_contents_json(result_table)
-        res << el
-      end
-    end
-    if in_params? :module_result_texts then
-      load_markdown
-      (my_module.results.select { |r| r.is_text && r.active? }).each do |result_text|
-        res << generate_new_el(false)
-        el = generate_el(
-          "reports/elements/result_text_element.html.erb",
-          { result: result_text, markdown: @markdown }
-        )
-        el[:children] = generate_result_contents_json(result_text)
-        res << el
-      end
-    end
-    if in_params? :module_activity then
-      res << generate_new_el(false)
-      res << generate_el(
-        "reports/elements/my_module_activity_element.html.erb",
-        { my_module: my_module, order: :asc }
-      )
-    end
-    if in_params? :module_samples then
-      res << generate_new_el(false)
-      res << generate_el(
-        "reports/elements/my_module_samples_element.html.erb",
-        { my_module: my_module, order: :asc }
-      )
-    end
-    res << generate_new_el(false)
-    res
-  end
-
-  def generate_step_contents_json(step)
-    res = []
-    if in_params? :step_checklists then
-      step.checklists.each do |checklist|
-        res << generate_new_el(false)
-        res << generate_el(
-          "reports/elements/step_checklist_element.html.erb",
-          { checklist: checklist }
-        )
-      end
-    end
-    if in_params? :step_assets then
-      step.assets.each do |asset|
-        res << generate_new_el(false)
-        res << generate_el(
-          "reports/elements/step_asset_element.html.erb",
-          { asset: asset }
-        )
-      end
-    end
-    if in_params? :step_tables then
-      step.tables.each do |table|
-        res << generate_new_el(false)
-        res << generate_el(
-          "reports/elements/step_table_element.html.erb",
-          { table: table }
-        )
-      end
-    end
-    if in_params? :step_comments then
-      res << generate_new_el(false)
-      res << generate_el(
-        "reports/elements/step_comments_element.html.erb",
-        { step: step, order: :asc }
-      )
-    end
-    res << generate_new_el(false)
-    res
-  end
-
-  def generate_result_contents_json(result)
-    res = []
-    if in_params? :result_comments then
-      res << generate_new_el(true)
-      res << generate_el(
-        "reports/elements/result_comments_element.html.erb",
-        { result: result, order: :asc }
-      )
-    else
-      res << generate_new_el(false)
-    end
-    res
-  end
-
-  def elements_empty?(elements)
-    if elements.blank?
-      return true
-    elsif elements.count == 0 then
-      return true
-    elsif elements.count == 1
-      el = elements[0]
-      if el.include? :new_element and el[:new_element]
-        return true
-      else
-        return false
-      end
-    end
-    return false
-  end
+  include StringUtility
+  VisibleProject = Struct.new(:path, :name)
+  AvailableRepository = Struct.new(:id, :name)
 
   def load_vars
     @report = Report.find_by_id(params[:id])
-
-    unless @report
-      render_404
-    end
+    render_404 unless @report
   end
 
   def load_vars_nested
     @project = Project.find_by_id(params[:project_id])
+    render_404 unless @project
+  end
 
-    unless @project
-      render_404
+  def check_manage_permissions
+    render_403 unless can_manage_reports?(@project.team)
+  end
+
+  def load_visible_projects
+    render_404 unless current_team
+    projects = current_team.projects.visible_from_user_by_name(
+      current_user, current_team, search_params[:q]
+    ).limit(Constants::SEARCH_LIMIT).select(:id, :name)
+    @visible_projects = projects.collect do |project|
+      VisibleProject.new(new_project_reports_path(project),
+                         ellipsize(project.name, 50, 40))
     end
   end
 
-  def check_view_permissions
-    unless can_view_reports(@project)
-      render_403
-    end
-  end
-
-  def check_create_permissions
-    unless can_create_new_report(@project)
-      render_403
-    end
-  end
-
-  def check_destroy_permissions
-    unless can_delete_reports(@project)
-      render_403
+  def load_available_repositories
+    repositories = current_team.repositories
+                               .name_like(search_params[:q])
+                               .limit(Constants::SEARCH_LIMIT)
+                               .select(:id, :name)
+    @available_repositories = repositories.collect do |repository|
+      AvailableRepository.new(repository.id,
+                              ellipsize(repository.name, 75, 50))
     end
   end
 
   def report_params
-    params.require(:report).permit(:name, :description, :grouped_by, :report_contents)
+    params.require(:report)
+          .permit(:name, :description, :grouped_by, :report_contents)
   end
 
+  def search_params
+    params.permit(:q)
+  end
+
+  def save_PDF_params
+    params.permit(:repository_id,
+                  :respository_column_id,
+                  :repository_item_id,
+                  :html)
+  end
 end

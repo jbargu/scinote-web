@@ -1,24 +1,23 @@
-<% provide(:head_title, raw(t("my_modules.protocols.head_title", project: @project.name, module: @my_module.name))) %>
+<% provide(:head_title, t("my_modules.protocols.head_title", project: h(@project.name), module: h(@my_module.name)).html_safe) %>
+
+<%= render partial: 'shared/drag_n_drop_overlay' %>
 <%= render partial: "shared/sidebar" %>
 <%= render partial: "shared/secondary_navigation" %>
 
-<%= render partial: "module_header" %>
+<div class="content-pane">
+  <%= render partial: "module_header" %>
 
-<div>
-  <div data-role="protocol-status-bar" style="display: inline;">
-    <%= render partial: "my_modules/protocols/protocol_status_bar.html.erb" %>
+  <div>
+    <div data-role="protocol-status-bar" style="display: inline;">
+      <%= render partial: "my_modules/protocols/protocol_status_bar.html.erb" %>
+    </div>
+    <%= render partial: "my_modules/protocols/protocol_buttons.html.erb" %>
+    <%= render partial: "my_modules/state_buttons.html.erb" %>
   </div>
-  <%= render partial: "my_modules/protocols/protocol_buttons.html.erb" %>
-</div>
 
-<div data-role="steps-container">
-  <%= render partial: "protocols/steps.html.erb" %>
-</div>
-
-<!-- Tutorial data -->
-<div class="hidden" data-role="tutorial-data" data-module-id="<%= @my_module.id %>"
-  data-module-protocols-step-text="<%=t 'tutorial.module_protocols_html' %>"
-  data-module-protocols-click-results-step-text="<%=t 'tutorial.module_protocols_click_results_html' %>">
+  <div data-role="steps-container">
+    <%= render partial: "protocols/steps.html.erb" %>
+  </div>
 </div>
 
 <!-- URL for status bar refreshing -->
@@ -41,6 +40,9 @@
 
 <!-- Import protocol elements -->
 <%= render partial: "protocols/import_export/import_elements.html.erb" %>
+
+<!-- Complete task modal -->
+<%= render partial: 'my_modules/complete_task_modal.html.erb' %>
 
 <%= stylesheet_link_tag 'datatables' %>
 <%= javascript_include_tag("my_modules/protocols") %>

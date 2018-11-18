@@ -24,17 +24,17 @@ namespace :data do
 
       User.transaction do
         begin
-          # Destroy user_organization, and possibly organization
-          if user.organizations.count > 0
-            oids = user.organizations.pluck(:id)
+          # Destroy user_team, and possibly team
+          if user.teams.count > 0
+            oids = user.teams.pluck(:id)
             oids.each do |oid|
-              org = Organization.find(oid)
-              user_org = user.user_organizations.where(organization: org).first
-              destroy_org = (org.users.count == 1 && org.created_by == user)
-              if !user_org.destroy(nil) then
+              team = Team.find(oid)
+              user_team = user.user_teams.where(team: team).first
+              destroy_team = (team.users.count == 1 && team.created_by == user)
+              if !user_team.destroy(nil) then
                 raise Exception
               end
-              org.destroy! if destroy_org
+              team.destroy! if destroy_team
             end
           end
 
@@ -69,9 +69,41 @@ namespace :data do
     .where.not(invitation_token: nil)
     .where("created_at < ?", Devise.invite_for.ago)
     destroy_users(users)
+
+    # Remove users who didn't finish signup with LinkedIn
+    users = User.joins(:user_identities)
+                .where(confirmed_at: nil)
+                .where('users.created_at < ?', Devise.confirm_within.ago)
+    destroy_users(users)
   end
 
   desc "Remove temporary and obsolete data"
   task clean: [:environment, :clean_temp_files, :clean_unconfirmed_users]
 
+  desc 'Export team to directory'
+  task :team_export, [:team_id] => [:environment] do |_, args|
+    Rails.logger.info(
+      "Exporting team with ID:#{args[:team_id]} to directory in tmp"
+    )
+    te = TeamExporter.new(args[:team_id])
+    te.export_to_dir if te
+  end
+
+  desc 'Import team from directory'
+  task :team_import, [:dir_path] => [:environment] do |_, args|
+    Rails.logger.info(
+      "Importing team from directory #{args[:dir_path]}"
+    )
+    TeamImporter.new.import_from_dir(args[:dir_path])
+  end
+
+  desc 'Delete team and all data inside the team'
+  task :team_delete, [:team_id] => [:environment] do |_, args|
+    Rails.logger.info(
+      "Deleting team with ID:#{args[:team_id]} and all data inside the team"
+    )
+    team = Team.find_by_id(args[:team_id])
+    raise StandardError, 'Can not load team' unless team
+    UserDataDeletion.delete_team_data(team) if team
+  end
 end

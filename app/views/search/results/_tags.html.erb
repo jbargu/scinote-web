@@ -1,6 +1,6 @@
 <% results.each do |tag| %>
   <h5>
-    <span class="glyphicon glyphicon-tag" style="color: <%= tag.color %>"></span>
+    <span class="fas fa-tag" style="color: <%= tag.color %>"></span>
     <%= render partial: "search/results/partials/tag_text.html.erb", locals: { tag: tag, query: search_query } %>
   </h5>
 
@@ -31,7 +31,6 @@
         <% experiments_results(tag).each_with_index do |exp, i| %>
           <%= render partial: 'search/results/partials/experiment_text.html.erb',
                      locals: { experiment: exp } %>
-          <% #byebug %>
           <% if i != (experiments_results(tag).count - 1) %>
             ,&nbsp;
           <% end %>
@@ -42,13 +41,13 @@
     <span>
       <%=t "search.index.project" %>
       <%= render partial: "search/results/partials/project_text.html.erb",
-                 locals: { project: tag.project } %>
+                 locals: { project: tag.project, link_to_page: :show } %>
     </span>
     <br>
     <span>
-      <%=t "search.index.organization" %>
-      <%= render partial: "search/results/partials/organization_text.html.erb",
-                 locals: { organization: tag.project.organization } %>
+      <%=t "search.index.team" %>
+      <%= render partial: "search/results/partials/team_text.html.erb",
+                 locals: { team: tag.project.team } %>
     </span>
   </p>
 

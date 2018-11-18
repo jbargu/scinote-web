@@ -1,8 +1,8 @@
-class ResultComment < ActiveRecord::Base
-  validates :result, :comment, presence: true
-  validates :result_id, uniqueness: { scope: :comment_id }
+class ResultComment < Comment
+  belongs_to :result,
+             foreign_key: :associated_id,
+             inverse_of: :result_comments,
+             optional: true
 
-  belongs_to :result, inverse_of: :result_comments
-  belongs_to :comment,
-             inverse_of: :result_comment
+  validates :result, presence: true
 end

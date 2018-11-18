@@ -1,7 +1,7 @@
 <div class="row">
-  <div class="col-xs-6 col-sm-6 col-md-3">
-    <div class="badge-icon bg-primary">
-      <span class="glyphicon glyphicon-calendar"></span>
+  <div class="col-xs-6 col-sm-6 col-md-4">
+    <div class="badge-icon">
+      <span class="fas fa-calendar-alt"></span>
     </div>
     <div class="well well-sm">
       <span class="hidden-xs hidden-sm hidden-md"><%=t "my_modules.module_header.start_date" %></span>
@@ -9,43 +9,62 @@
     </div>
   </div>
 
-  <div class="col-xs-6 col-sm-6 col-md-3">
-    <div class="badge-icon bg-primary">
-      <% if can_edit_module(@my_module) then %>
+  <div class="col-xs-6 col-sm-6 col-md-4 help_tooltips"
+       data-tooltiplink="<%= I18n.t('tooltips.link.task.due_date_specific') %>"
+       data-tooltipcontent="<%= I18n.t('tooltips.text.task.due_date_specific') %>">
+    <div class="badge-icon">
+      <% if can_manage_module?(@my_module) %>
         <%= link_to due_date_my_module_path(@my_module, format: :json), remote: true, class: "due-date-link", style: "color: inherit" do %>
-          <span class="glyphicon glyphicon-calendar"></span>
+          <span class="fas fa-calendar-alt"></span>
         <% end %>
       <% else %>
-        <span class="glyphicon glyphicon-calendar"></span>
+        <span class="fas fa-calendar-alt"></span>
       <% end %>
     </div>
     <div class="well well-sm">
       <span class="hidden-xs hidden-sm  hidden-md"><%=t "my_modules.module_header.due_date" %></span>
-      <% if can_edit_module(@my_module) then %>
-        <%= link_to due_date_my_module_path(@my_module, format: :json), remote: true, class: "due-date-link due-date-refresh", style: "color: inherit" do %>
+      <% if can_manage_module?(@my_module) %>
+        <%= link_to due_date_my_module_path(@my_module, format: :json), remote: true, class: "due-date-link", style: "color: inherit" do %>
+          <span class="task-due-date">
             <%= render partial: "module_header_due_date_label.html.erb",
               locals: { my_module: @my_module } %>
+          </span>
         <% end %>
       <% else %>
+        <span class="task-due-date">
           <%= render partial: "module_header_due_date_label.html.erb",
             locals: { my_module: @my_module } %>
+        </span>
       <% end %>
     </div>
   </div>
 
-   <div class="col-xs-12 col-sm-12 col-md-6" id="module-tags" data-module-tags-url="<%= my_module_my_module_tags_url(@my_module, format: :json) %>">
-    <div class="badge-icon bg-primary">
-      <% if can_edit_tags_for_module(@my_module) %>
+  <div class="col-xs-6 col-sm-6 col-md-4">
+    <div class="badge-icon">
+      <span class="fas fa-check"></span>
+    </div>
+    <div class="well well-sm">
+      <span class="task-state-label">
+      <%= render partial: "module_state_label.html.erb",
+        locals: { my_module: @my_module } %>
+      </span>
+    </div>
+  </div>
+</div>
+<div class="row">
+  <div class="col-xs-12 col-sm-12 col-md-12" id="module-tags" data-module-tags-url="<%= my_module_my_module_tags_url(@my_module, format: :json) %>">
+    <div class="badge-icon">
+      <% if can_manage_module?(@my_module) %>
         <a class="edit-tags-link" data-remote="true" href="<%= my_module_tags_edit_url(@my_module, format: :json) %>" style="color: inherit">
-      <% end %>
-      <span class="glyphicon glyphicon-tags"></span>
-      <% if can_edit_tags_for_module(@my_module) %>
+          <span class="fas fa-tags"></span>
         </a>
+      <% else %>
+        <span class="fas fa-tags"></span>
       <% end %>
     </div>
     <div class="well well-sm">
       <span class="hidden-xs hidden-sm"><%=t "my_modules.module_header.tags" %></span>
-      <% if can_edit_module(@my_module) then %>
+      <% if can_manage_module?(@my_module) %>
         <%= link_to my_module_tags_edit_url(@my_module, format: :json), remote: true, class: "edit-tags-link tags-refresh", style: "color: inherit" do %>
           <%= render partial: "my_modules/tags", locals: { my_module: @my_module } %>
         <% end %>
@@ -57,17 +76,17 @@
 </div>
 
 <div>
-  <div class="badge-icon bg-primary">
-     <% if can_edit_module(@my_module) %>
+  <div class="badge-icon">
+     <% if can_manage_module?(@my_module) %>
       <%= link_to description_my_module_path(@my_module, format: :json), remote: true, class: "description-link", style: "color: inherit" do %>
-        <span class="glyphicon glyphicon-info-sign"></span>
+        <span class="fas fa-info-circle"></span>
       <% end %>
     <% else %>
-      <span class="glyphicon glyphicon-info-sign"></span>
+      <span class="fas fa-info-circle"></span>
     <% end %>
   </div>
   <div class="well well-sm">
-    <% if can_edit_module(@my_module) %>
+    <% if can_manage_module?(@my_module) %>
       <%= link_to description_my_module_path(@my_module, format: :json), remote: true, class: "description-label description-link description-refresh", style: "color: inherit" do %>
         <% if @my_module.description.present? and not @my_module.description.empty? %>
           <%= @my_module.description %>
@@ -94,5 +113,3 @@
 
 <!-- Manage tags modal -->
 <%= render partial: "my_modules/modals/manage_module_tags_modal", locals: { my_module: @my_module } %>
-
-<%= javascript_include_tag("my_modules") %>

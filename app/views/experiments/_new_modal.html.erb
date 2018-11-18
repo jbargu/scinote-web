@@ -1,6 +1,6 @@
 <!-- New experiment modal -->
 <div class="modal" id="new-experiment-modal" tabindex="-1" role="dialog" aria-labelledby="new-experiment-modal-label">
-  <%= bootstrap_form_for [@project, @experiment] do |f| %>
+  <%= bootstrap_form_for [@project, @experiment], remote: true do |f| %>
     <div class="modal-dialog" role="document">
       <div class="modal-content">
         <div class="modal-header">
@@ -11,8 +11,8 @@
           <%= render partial: "form.html.erb", locals: { form: f } %>
         </div>
         <div class="modal-footer">
-          <%= f.submit t("experiments.new.modal_create"), class: "btn btn-primary" %>
           <button type="button" class="btn btn-default" data-dismiss="modal"><%=t "general.cancel" %></button>
+          <%= f.submit t("experiments.new.modal_create"), class: "btn btn-success" %>
         </div>
       </div>
     </div>

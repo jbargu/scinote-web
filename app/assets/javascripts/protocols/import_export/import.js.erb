@@ -60,7 +60,7 @@ function importProtocolFromFile(
     // Populate values in the template
     if (values !== null) {
       _.each(values, function(val, key) {
-        template.find("[data-val='" + key + "']").text(val);
+        template.find("[data-val='" + key + "']").append(val);
       });
     }
 
@@ -134,8 +134,11 @@ function importProtocolFromFile(
       var stepGuid = node.attr("guid");
       var stepPosition = String(Number.parseInt(node.attr("position")) + 1);
       var stepName = node.children("name").text();
-      var stepDescription = node.children("description").text();
-
+      var stepDescription = displayTinyMceAssetInDescription(
+                              node,
+                              protocolFolders[position],
+                              stepGuid
+                            );
       // Generate step element
       var stepEl = newPreviewElement(
         "step",
@@ -173,10 +176,14 @@ function importProtocolFromFile(
       if (tableNodes.length > 0) {
         tableNodes.each(function() {
           var tableId = $(this).attr("id");
+          var tableName = $(this).children("name").text();
           var tableContent = $(this).children("contents").text();
 
           // Generate table element
-          var tableEl = newPreviewElement("table");
+          var tableEl = newPreviewElement(
+            "table",
+            { name: tableName }
+          );
           var elnTableEl = generateElnTable(tableId, tableContent);
           addChildToPreviewElement(tableEl, "table", elnTableEl);
 
@@ -221,15 +228,48 @@ function importProtocolFromFile(
     });
   }
 
+  // display tiny_mce_assets in step description
+  function displayTinyMceAssetInDescription(node, folder, stepGuid) {
+    if (node.children('descriptionAssets').length === 0) {
+      var description = node.children('description').html();
+      return $('<div></div>').html(
+        description.replace(/\[~tiny_mce_id:([0-9a-zA-Z]+)\]/,
+                                   '<strong>Can\'t import image</strong>')
+                   .replace('<!--[CDATA[  ', '')
+                   .replace('  ]]--&gt;', '')
+                   .replace('  ]]-->','')
+                   .replace('  ]]&gt;', '')
+      ).html();
+    }
+    var description = node.children('description').html();
+    node.find('descriptionAssets > tinyMceAsset').each(function(i, element) {
+      var match = '[~tiny_mce_id:' + element.getAttribute('tokenId') + ']';
+      var assetBytes = getAssetBytes(folder,
+                                     stepGuid,
+                                     element.getAttribute('fileref'));
+      var image_tag = "<img style='max-width:300px; max-height:300px;' src='data:" + element.children[1].innerHTML + ";base64," + assetBytes + "' />"
+      description = description.replace(match, image_tag); // replace the token with image
+    }).bind(this);
+    // I know is crazy but is the only way I found to pass valid HTML
+    return $('<div></div>').html(
+      description.replace('<!--[CDATA[  ', '')
+                 .replace('  ]]--&gt;', '')
+                 .replace('  ]]-->','')
+                 .replace('  ]]&gt;', '')
+    ).html();
+  }
+
   /* Navigation functions */
 
-  function navigationJumpToFirstProtocol() {
+  function navigationJumpToFirstProtocol(ev) {
+    ev.preventDefault();
     currentProtocol = 0;
     previewProtocol(currentProtocol, true);
     updateNavigationButtons();
   }
 
-  function navigationJumpToPreviousProtocol() {
+  function navigationJumpToPreviousProtocol(ev) {
+    ev.preventDefault();
     if (currentProtocol > 0) {
       currentProtocol--;
     }
@@ -237,7 +277,8 @@ function importProtocolFromFile(
     updateNavigationButtons();
   }
 
-  function navigationJumpToNextProtocol() {
+  function navigationJumpToNextProtocol(ev) {
+    ev.preventDefault();
     if (currentProtocol < (nrOfProtocols - 1)) {
       currentProtocol++;
     }
@@ -245,7 +286,8 @@ function importProtocolFromFile(
     updateNavigationButtons();
   }
 
-  function navigationJumpToLastProtocol() {
+  function navigationJumpToLastProtocol(ev) {
+    ev.preventDefault();
     currentProtocol = nrOfProtocols - 1;
     previewProtocol(currentProtocol, true);
     updateNavigationButtons();
@@ -306,34 +348,34 @@ function importProtocolFromFile(
     // Bind on "Import" buttons
     $("[data-action='import-current']")
     .off("click")
-    .on("click", function() { importCurrentProtocol(); });
+    .on("click", function(ev) { importCurrentProtocol(ev); });
     $("[data-action='import-all']")
     .off("click")
-    .on("click", function() { importAllProtocols(); });
+    .on("click", function(ev) { importAllProtocols(ev); });
 
     // Bind on navigation buttons
     $("[data-action='jump-to-first-protocol']")
     .off("click")
-    .on("click", function() { navigationJumpToFirstProtocol(); });
+    .on("click", function(ev) { navigationJumpToFirstProtocol(ev); });
     $("[data-action='jump-to-previous-protocol']")
     .off("click")
-    .on("click", function() { navigationJumpToPreviousProtocol(); });
+    .on("click", function(ev) { navigationJumpToPreviousProtocol(ev); });
     $("[data-action='jump-to-next-protocol']")
     .off("click")
-    .on("click", function() { navigationJumpToNextProtocol(); });
+    .on("click", function(ev) { navigationJumpToNextProtocol(ev); });
     $("[data-action='jump-to-last-protocol']")
     .off("click")
-    .on("click", function() { navigationJumpToLastProtocol(); });
+    .on("click", function(ev) { navigationJumpToLastProtocol(ev); });
     updateNavigationButtons();
   }
 
   /* Actual import */
 
-  function importCurrentProtocol() {
-
+  function importCurrentProtocol(ev) {
     var check_linked = $("[data-role='protocol-status-bar']")
                         .text();
     var confirm_message = "";
+    ev.preventDefault();
     if( check_linked.trim() !== '(unlinked)' ){
       confirm_message = I18n.t("protocols.import_export.import_modal.import_to_linked_task_file");
     } else {
@@ -365,9 +407,11 @@ function importProtocolFromFile(
     }
   }
 
-  function importAllProtocols() {
+  function importAllProtocols(ev) {
     var nrOfImportedProtocols = 0;
     var datas = [];
+
+    ev.preventDefault();
 
     // Show spinner
     animateSpinner(importModal);
@@ -431,7 +475,28 @@ function importProtocolFromFile(
       stepJson.id = stepId;
       stepJson.position = $(this).attr("position");
       stepJson.name = $(this).children("name").text();
-      stepJson.description = $(this).children("description").text();
+      // I know is crazy but is the only way I found to pass valid HTML
+      stepJson.description = $('<div></div>').html($(this)
+                                             .children("description")
+                                             .html()
+                                             .replace('<!--[CDATA[', '')
+                                             .replace(']]&gt;', ''))
+                                             .html();
+      // Iterage throug tiny_mce_assets
+      var descriptionAssetsJson = [];
+      $(this).find("descriptionAssets > tinyMceAsset").each(function() {
+        var tinyMceAsset = {};
+        var fileRef = $(this).attr("fileRef");
+        tinyMceAsset.tokenId = $(this).attr('tokenId');
+        tinyMceAsset.fileType= $(this).children("fileType").text();
+        tinyMceAsset.bytes = getAssetBytes(
+          protocolFolders[index],
+          stepGuid,
+          fileRef
+        )
+        descriptionAssetsJson.push(tinyMceAsset);
+      });
+      stepJson.descriptionAssets = descriptionAssetsJson;
 
       // Iterate through assets
       var stepAssetsJson = [];
@@ -458,6 +523,7 @@ function importProtocolFromFile(
       $(this).find("elnTables > elnTable").each(function(){
         var stepTableJson = {};
         stepTableJson.id = $(this).attr("id");
+        stepTableJson.name = $(this).children("name").text();
         var contents = $(this).children("contents").text();
         contents = hex2a(contents);
         contents = window.btoa(contents);
@@ -497,7 +563,7 @@ function importProtocolFromFile(
     $.extend(data_json, params);
 
     var rough_size = roughSizeOfObject(data_json);
-    if (rough_size > <%= FILE_SIZE_LIMIT.megabytes %>) {
+    if (rough_size > ($(document.body).data('file-max-size-mb') * 1024 * 1024)) {
       // Call the callback function
       resultCallback({ name: protocolJson["name"], new_name: null, status: "size_too_large" });
       return;

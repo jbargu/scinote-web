@@ -1,6 +1,6 @@
 <% results.each do |project| %>
   <h5>
-    <span class="glyphicon glyphicon-blackboard"></span>
+    <span class="fas fa-folder"></span>
     <%= render partial: 'search/results/partials/project_text.html.erb',
                locals: { project: project, query: search_query, link_to_page: :show } %>
   </h5>
@@ -12,10 +12,11 @@
     </span>
     <br>
     <span>
-      <%=t 'search.index.organization' %>
-      <%= render partial: 'search/results/partials/organization_text.html.erb',
-                 locals: { organization: project.organization } %>
+      <%=t 'search.index.team' %>
+      <%= render partial: 'search/results/partials/team_text.html.erb',
+                 locals: { team: project.team } %>
     </span>
+    <span data-hook="search-result-project"></span>
   </p>
 
   <hr>

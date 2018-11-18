@@ -1,0 +1,155 @@
+<%
+# How to use this modal:
+# 1. Render it in the page (HTML) of your choice
+# 2. Add an element (e.g. <a href>) with following attributes:
+#    * data-trigger="invite-users",
+#    * data-modal-id="modal-id",
+#
+# Modal parameters:
+# * modal_id: unique id so the JS works if multiple modals are present
+#   on the same page
+# * type:
+#   * 'invite_to_team' => params: team
+#   * 'invite_to_team_with_role' => params: team, role
+#   * 'invite',
+#   * 'invite_with_team_selector',
+#   * 'invite_with_team_selector_and_role' => params: role
+# * team: invite users to the specified team
+# * role: all users are invited as the specified role
+# * (optional) text_title: custom title text for modal
+# * (optional) text_invite_heading: custom invite heading text for modal
+%>
+<%
+text_title ||= nil
+text_invite_heading ||= nil
+invite_to_team = type.in?(%w(invite_to_team invite_to_team_with_role))
+%>
+<div
+  class="modal modal-invite-users"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="invite-users-modal-label"
+  data-id="<%= modal_id %>"
+  data-role="invite-users-modal"
+  data-type="<%= type %>"
+  data-url="<%= invite_users_path %>"
+  data-backdrop="static"
+  data-keyboard="false"
+  data-max-tags="<%= Constants::INVITE_USERS_LIMIT %>"
+  <%= "data-team-id=#{team.id}" if invite_to_team %>
+  <%= "data-team-role=#{role}" if type.in?(%w(invite_to_team_with_role invite_with_team_selector_and_role)) %>
+>
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+
+      <div class="modal-header">
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+        <h4 class="modal-title">
+          <% if text_title %>
+            <%= text_title %>
+          <% else %>
+            <% if invite_to_team %>
+              <%= t('invite_users.to_team.title', team: team.name) %>
+            <% else %>
+              <%= t('invite_users.no_team.title') %>
+            <% end %>
+          <% end %>
+        </h4>
+      </div>
+
+      <div class="modal-body">
+        <div data-role="step-form">
+          <p>
+            <% if text_invite_heading %>
+              <%= text_invite_heading %>
+            <% else %>
+              <% if invite_to_team %>
+                <%= t('invite_users.to_team.heading', team: team.name) %>
+              <% else %>
+                <%= t('invite_users.no_team.heading') %>
+              <% end %>
+            <% end %>
+          </p>
+
+          <select class="emails-input" multiple data-role="tags-input" name="emails[]">
+          </select>
+          <br />
+          <em><%= t('invite_users.input_subtitle') %></em>
+
+          <% if type.in?(['invite_with_team_selector', 'invite_with_team_selector_and_role']) %>
+            <% # Only allow inviting to teams where user is admin %>
+            <% uos = current_user ? current_user.user_teams.where(role: UserTeam.roles[:admin]).joins(:team) : [] %>
+            <% if uos.count > 0 %>
+              <div class="team-selector">
+                <div class="heading">
+                  <input type="checkbox" data-role="team-selector-checkbox" />
+                  <span><%= t('invite_users.invite_to_team_heading') %></span>
+                </div>
+                <%= select_tag(
+                  'team-select',
+                  options_for_select(
+                    uos.pluck('teams.name', 'teams.id')
+                  ),
+                  {
+                    class: 'form-control selectpicker',
+                    'data-role' => 'team-selector-dropdown',
+                    disabled: 'disabled'
+                  }
+                ) %>
+              </div>
+            <% end %>
+          <% end %>
+        </div>
+        <div class="results-container" data-role="step-results" data-clear="true">
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div data-role="step-form">
+          <button type="button" class="btn btn-default" data-dismiss="modal">
+            <%= t('general.cancel') %>
+          </button>
+
+          <!-- Invite buttons -->
+          <button type="button" class="btn btn-success help_tooltips"
+                  data-tooltiplink="<%= I18n.t('tooltips.link.invite_to_sci') %>"
+                  data-tooltipcontent="<%= I18n.t('tooltips.text.invite_to_sci') %>"
+                  data-role="invite-btn" data-action="invite"
+                  disabled="disabled">
+            <%= t('invite_users.invite_btn') %>
+          </button>
+
+          <div class="btn-group" data-role="invite-with-role-div">
+            <button type="button" class="btn btn-success dropdown-toggle help_tooltips"
+                    data-tooltiplink="<%= I18n.t('tooltips.link.invite_to_sci') %>"
+                    data-tooltipcontent="<%= I18n.t('tooltips.text.invite_to_sci') %>"
+                    data-toggle="dropdown" data-id="invite-btn" aria-haspopup="true"
+                    aria-expanded="false" data-role="invite-with-role-btn"
+                    disabled="disabled">
+              <%= t('invite_users.invite_btn') %>
+              &nbsp;
+              <span class="caret"></span>
+            </button>
+            <ul class="dropdown-menu">
+              <li>
+                <%= link_to t('invite_users.invite_guest'), '#', data: { action: 'invite', 'team-role' => 'guest', remote: true } %>
+              </li>
+              <li>
+                <%= link_to t('invite_users.invite_user'), '#', data: { action: 'invite', 'team-role' => 'normal_user', remote: true } %>
+              </li>
+              <li>
+                <%= link_to t('invite_users.invite_admin'), '#', data: { action: 'invite', 'team-role' => 'admin', remote: true } %>
+              </li>
+            </ul>
+          </div>
+        </div>
+        <div data-role="step-results">
+          <button type="button" class="btn btn-default" data-dismiss="modal">
+            <%= t('general.close') %>
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>

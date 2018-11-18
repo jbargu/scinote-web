@@ -1,53 +1,86 @@
 class ProjectsController < ApplicationController
   include SampleActions
   include RenamingUtil
+  include TeamsHelper
+  include InputSanitizeHelper
 
-  before_action :load_vars, only: [:show, :edit, :update,
-                                   :notifications, :reports,
-                                   :samples, :experiment_archive,
-                                   :delete_samples, :samples_index]
-  before_action :check_view_permissions, only: [:show, :reports,
-                                                :samples, :experiment_archive,
-                                                :samples_index]
-  before_action :check_view_notifications_permissions, only: [ :notifications ]
-  before_action :check_edit_permissions, only: [ :edit ]
-  before_action :check_experiment_archive_permissions,
-                only: [:experiment_archive]
-
-  filter_by_archived = false
+  before_action :generate_intro_demo, only: :index
+  before_action :load_vars, only: %i(show edit update
+                                     notifications reports
+                                     samples experiment_archive
+                                     delete_samples samples_index)
+  before_action :load_projects_tree, only: %i(show samples archive
+                                              experiment_archive)
+  before_action :load_archive_vars, only: :archive
+  before_action :check_view_permissions, only: %i(show reports notifications
+                                                  samples experiment_archive
+                                                  samples_index)
+  before_action :check_create_permissions, only: %i(new create)
+  before_action :check_manage_permissions, only: :edit
 
   # except parameter could be used but it is not working.
-  layout :choose_layout
+  layout 'fluid'
 
   # Action defined in SampleActions
-  DELETE_SAMPLES = I18n.t("samples.delete_samples")
+  DELETE_SAMPLES = 'Delete'.freeze
 
   def index
-    @current_organization_id = params[:organization].to_i
-    @current_sort = params[:sort].to_s
-    @projects_by_orgs = current_user.projects_by_orgs(
-      @current_organization_id, @current_sort, @filter_by_archived)
-    @organizations = current_user.organizations
+    respond_to do |format|
+      format.json do
+        @current_team = current_team if current_team
+        @current_team ||= current_user.teams.first
+        @projects = ProjectsOverviewService
+                    .new(@current_team, current_user, params)
+                    .project_cards
+        render json: {
+          html: render_to_string(
+            partial: 'projects/index/team_projects.html.erb',
+                     locals: { projects: @projects }
+          ),
+          count: @projects.size
+        }
+      end
+      format.html do
+        current_team_switch(Team.find_by_id(params[:team])) if params[:team]
+        @teams = current_user.teams
+        # New project for create new project modal
+        @project = Project.new
+        view_state =
+          current_team.current_view_state(current_user)
+        @current_filter = view_state.state.dig('projects', 'filter')
+        @current_sort = view_state.state.dig('projects', 'cards', 'sort')
+        load_projects_tree
+      end
+    end
+  end
 
-    # New project for create new project modal
-    @project = Project.new
+  def index_dt
+    @draw = params[:draw].to_i
+    respond_to do |format|
+      format.json do
+        @current_team = current_team if current_team
+        @current_team ||= current_user.teams.first
+        @projects = ProjectsOverviewService
+                    .new(@current_team, current_user, params)
+                    .projects_datatable
+      end
+    end
   end
 
   def archive
-    @filter_by_archived = true
     index
   end
 
   def new
     @project = Project.new
-    @organizations = current_user.organizations
   end
 
   def create
     @project = Project.new(project_params)
-    @project.created_by =  current_user
+    @project.created_by = current_user
     @project.last_modified_by = current_user
-    if @project.save
+    if current_team.id == project_params[:team_id].to_i &&
+       @project.save
       # Create user-project association
       up = UserProject.new(
         role: :owner,
@@ -68,10 +101,10 @@ class ProjectsController < ApplicationController
         )
       )
 
-      flash[:success] = t("projects.create.success_flash", name: @project.name)
+      message = t('projects.create.success_flash', name: @project.name)
       respond_to do |format|
         format.json {
-          render json: { url: projects_path }, status: :ok
+          render json: { message: message }, status: :ok
         }
       end
     else
@@ -91,7 +124,8 @@ class ProjectsController < ApplicationController
             partial: "edit.html.erb",
             locals: { project: @project }
           }),
-          title: t("projects.index.modal_edit_project.modal_title", project: @project.name)
+          title: t('projects.index.modal_edit_project.modal_title',
+                   project: escape_input(@project.name))
         }
       }
     end
@@ -102,30 +136,35 @@ class ProjectsController < ApplicationController
     flash_error = t('projects.update.error_flash', name: @project.name)
 
     # Check archive permissions if archiving/restoring
-    if project_params.include? :archive
-      if (project_params[:archive] and !can_archive_project(@project)) or
-        (!project_params[:archive] and !can_restore_project(@project))
+    if project_params.include? :archived
+      if (project_params[:archived] == 'true' &&
+          !can_archive_project?(@project)) ||
+         (project_params[:archived] == 'false' &&
+           !can_restore_project?(@project))
         return_error = true
-        is_archive = URI(request.referer).path == projects_archive_path ? "restore" : "archive"
-        flash_error = t("projects.#{is_archive}.error_flash", name: @project.name)
+        is_archive = project_params[:archived] == 'true' ? 'archive' : 'restore'
+        flash_error =
+          t("projects.#{is_archive}.error_flash", name: @project.name)
       end
+    elsif !can_manage_project?(@project)
+      render_403 && return
     end
 
     message_renamed = nil
     message_visibility = nil
-    if project_params.include? :name and
-      project_params[:name] != @project.name then
+    if (project_params.include? :name) &&
+       (project_params[:name] != @project.name)
       message_renamed = t(
-        "activities.rename_project",
+        'activities.rename_project',
         user: current_user.full_name,
         project_old: @project.name,
         project_new: project_params[:name]
       )
     end
-    if project_params.include? :visibility and
-      project_params[:visibility] != @project.visibility then
+    if (project_params.include? :visibility) &&
+       (project_params[:visibility] != @project.visibility)
       message_visibility = t(
-        "activities.change_project_visibility",
+        'activities.change_project_visibility',
         user: current_user.full_name,
         project: @project.name,
         visibility: project_params[:visibility] == "visible" ?
@@ -135,7 +174,7 @@ class ProjectsController < ApplicationController
     end
 
     @project.last_modified_by = current_user
-    if @project.update(project_params)
+    if !return_error && @project.update(project_params)
       # Add activities if needed
       if message_visibility.present?
         Activity.create(
@@ -155,10 +194,15 @@ class ProjectsController < ApplicationController
       end
 
       flash_success = t('projects.update.success_flash', name: @project.name)
+      if project_params[:archived] == 'true'
+        flash_success = t('projects.archive.success_flash', name: @project.name)
+      elsif project_params[:archived] == 'false'
+        flash_success = t('projects.restore.success_flash', name: @project.name)
+      end
       respond_to do |format|
-        format.html {
+        format.html do
           # Redirect URL for archive view is different as for other views.
-          if URI(request.referer).path == projects_archive_path
+          if project_params[:archived] == 'false'
             # The project should be restored
             unless @project.archived
               @project.restore(current_user)
@@ -169,56 +213,45 @@ class ProjectsController < ApplicationController
                 user: current_user,
                 project: @project,
                 message: t(
-                  "activities.restore_project",
+                  'activities.restore_project',
                   user: current_user.full_name,
                   project: @project.name
                 )
               )
-
-              flash_success = t('projects.restore.success_flash',
-                name: @project.name)
             end
-            redirect_to projects_archive_path
-          else
+          elsif @project.archived
             # The project should be archived
-            if @project.archived
-              @project.archive(current_user)
+            @project.archive(current_user)
 
-              # "Archive project" activity
-              Activity.create(
-                type_of: :archive_project,
-                user: current_user,
-                project: @project,
-                message: t(
-                  "activities.archive_project",
-                  user: current_user.full_name,
-                  project: @project.name
-                )
+            # "Archive project" activity
+            Activity.create(
+              type_of: :archive_project,
+              user: current_user,
+              project: @project,
+              message: t(
+                'activities.archive_project',
+                user: current_user.full_name,
+                project: @project.name
               )
-
-              flash_success = t('projects.archive.success_flash', name: @project.name)
-            end
-            redirect_to projects_path
+            )
           end
+          redirect_to projects_path
           flash[:success] = flash_success
-        }
-        format.json {
+        end
+        format.json do
           render json: {
             status: :ok,
-            html: render_to_string({
-              partial: "projects/index/project.html.erb",
-              locals: { project: @project }
-              })
+            message: flash_success
           }
-        }
+        end
       end
     else
       return_error = true
     end
 
-    if return_error then
+    if return_error
       respond_to do |format|
-        format.html {
+        format.html do
           flash[:error] = flash_error
           # Redirect URL for archive view is different as for other views.
           if URI(request.referer).path == projects_archive_path
@@ -226,17 +259,24 @@ class ProjectsController < ApplicationController
           else
             redirect_to projects_path
           end
-        }
-        format.json {
-          render json: @project.errors,
-            status: :unprocessable_entity
-        }
+        end
+        format.json do
+          render json: { message: flash_error, errors: @project.errors },
+                 status: :unprocessable_entity
+        end
       end
     end
   end
 
   def show
+    # save experiments order
+    if params[:sort]
+      @project.experiments_order = params[:sort].to_s
+      @project.save
+    end
     # This is the "info" view
+    current_team_switch(@project.team)
+    @current_sort = @project.experiments_order
   end
 
   def notifications
@@ -257,27 +297,52 @@ class ProjectsController < ApplicationController
 
   def samples
     @samples_index_link = samples_index_project_path(@project, format: :json)
-    @organization = @project.organization
+    @team = @project.team
   end
 
   def experiment_archive
+    current_team_switch(@project.team)
   end
 
   def samples_index
-    @organization = @project.organization
-
+    @team = @project.team
+    @user = current_user
     respond_to do |format|
       format.html
-      format.json {
-        render json: ::SampleDatatable.new(view_context, @organization, @project, nil)
-      }
+      format.json do
+        render json: ::SampleDatatable.new(view_context,
+                                           @team,
+                                           @project,
+                                           nil,
+                                           nil,
+                                           @user)
+      end
+    end
+  end
+
+  def dt_state_load
+    respond_to do |format|
+      format.json do
+        render json: {
+          state: current_team.current_view_state(current_user)
+            .state.dig('projects', 'table')
+        }
+      end
     end
   end
 
   private
 
+  include FirstTimeDataGenerator
+
+  def generate_intro_demo
+    return unless current_user.sign_in_count == 1
+    team = current_user.teams.where(created_by: current_user).first
+    seed_demo_data(current_user, team) if team && team.projects.blank?
+  end
+
   def project_params
-    params.require(:project).permit(:name, :organization_id, :visibility, :archived)
+    params.require(:project).permit(:name, :team_id, :visibility, :archived)
   end
 
   def load_vars
@@ -288,29 +353,37 @@ class ProjectsController < ApplicationController
     end
   end
 
+  def load_projects_tree
+    # Switch to correct team
+    current_team_switch(@project.team) unless @project.nil? || @project.new_record?
+    if current_user.teams.any?
+      @current_team = current_team if current_team
+      @current_team ||= current_user.teams.first
+      @current_sort ||= 'new'
+      @projects_tree = current_user.projects_tree(@current_team, @current_sort)
+    else
+      @projects_tree = []
+    end
+  end
+
+  def load_archive_vars
+    if current_user.teams.any?
+      @archived_projects_by_teams =
+        current_user.projects_by_teams(@current_team.id, @current_sort, true)
+    else
+      @archived_projects_by_teams = []
+    end
+  end
+
   def check_view_permissions
-    unless can_view_project(@project)
-      render_403
-    end
+    render_403 unless can_read_project?(@project)
   end
 
-  def check_view_notifications_permissions
-    unless can_view_project_notifications(@project)
-      render_403
-    end
+  def check_create_permissions
+    render_403 unless can_create_projects?(current_team)
   end
 
-  def check_edit_permissions
-    unless can_edit_project(@project)
-      render_403
-    end
-  end
-
-  def check_experiment_archive_permissions
-    render_403 unless can_view_project_archive(@project)
-  end
-
-  def choose_layout
-    action_name.in?(['index', 'archive']) ? 'main' : 'fluid'
+  def check_manage_permissions
+    render_403 unless can_manage_project?(@project)
   end
 end

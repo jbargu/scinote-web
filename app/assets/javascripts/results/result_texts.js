@@ -1,29 +1,48 @@
-// New result text behaviour
-$("#new-result-text").on("ajax:success", function(e, data) {
-    var $form = $(data.html);
-    $("#results").prepend($form);
+/* global TinyMCE Results Comments animateSpinner initFormSubmitLinks */
 
-    formAjaxResultText($form);
+(function() {
+  'use strict';
 
-    // Cancel button
-    $form.find(".cancel-new").click(function () {
-        $form.remove();
-        toggleResultEditButtons(true);
-    });
+  var ResultText = (function() {
+    var publicAPI;
 
-    toggleResultEditButtons(false);
+    // New result text behaviour
+    function initNewReslutText() {
+      $('#new-result-text').on('click', function(event) {
+        var $btn = $(this);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        event.stopPropagation();
+        $btn.off();
+        animateSpinner(null, true);
 
-    $("#result_name").focus();
-});
+        // get new result form
+        $.ajax({
+          url: $btn.data('href'),
+          method: 'GET',
+          success: function(data) {
+            var $form = $(data.html);
+            animateSpinner(null, false);
+            $('#results').prepend($form);
+            formAjaxResultText($form);
+            Results.initCancelFormButton($form, initNewReslutText);
+            Results.toggleResultEditButtons(false);
+            TinyMCE.refresh();
+            TinyMCE.highlight();
+            $('#result_name').focus();
+          },
+          error: function() {
+            animateSpinner(null, false);
+            initNewReslutText();
+          }
+        })
+      });
+    }
 
-$("#new-result-text").on("ajax:error", function(e, xhr, status, error) {
-    //TODO: Add error handling
-});
-
-// Edit result text button behaviour
-function applyEditResultTextCallback() {
-    $(".edit-result-text").on("ajax:success", function(e, data) {
-        var $result = $(this).closest(".result");
+    // Edit result text button behaviour
+    function applyEditResultTextCallback() {
+      $('.edit-result-text').on('ajax:success', function(e, data) {
+        var $result = $(this).closest('.result');
         var $form = $(data.html);
         var $prevResult = $result;
         $result.after($form);
@@ -32,49 +51,58 @@ function applyEditResultTextCallback() {
         formAjaxResultText($form);
 
         // Cancel button
-        $form.find(".cancel-edit").click(function () {
-            $form.after($prevResult);
-            $form.remove();
-            applyEditResultTextCallback();
-            toggleResultEditButtons(true);
+        $form.find('.cancel-edit').click(function() {
+          $form.after($prevResult);
+          $form.remove();
+          applyEditResultTextCallback();
+          Results.toggleResultEditButtons(true);
         });
+        Results.toggleResultEditButtons(false);
+        TinyMCE.refresh();
+        $('#result_name').focus();
+      });
+    }
 
-        toggleResultEditButtons(false);
-
-        $("#result_name").focus();
-    });
-
-    $(".edit-result-text").on("ajax:error", function(e, xhr, status, error) {
-        //TODO: Add error handling
-    });
-}
-
-// Apply ajax callback to form
-function formAjaxResultText($form) {
-    $form.on("ajax:success", function(e, data) {
+    // Apply ajax callback to form
+    function formAjaxResultText($form) {
+      $form.on('ajax:success', function(e, data) {
+        var newResult;
         $form.after(data.html);
-        var newResult = $form.next();
+        newResult = $form.next();
         initFormSubmitLinks(newResult);
         $(this).remove();
-
         applyEditResultTextCallback();
-        applyCollapseLinkCallBack();
-        toggleResultEditButtons(true);
-        initResultCommentTabAjax();
-        expandResult(newResult);
-    });
-    $form.on("ajax:error", function(e, xhr, status, error) {
+        Results.applyCollapseLinkCallBack();
+        Results.toggleResultEditButtons(true);
+        Results.expandResult(newResult);
+        TinyMCE.destroyAll();
+        Comments.initialize();
+        initNewReslutText();
+      });
+      $form.on('ajax:error', function(e, xhr) {
         var data = xhr.responseJSON;
-        $form.renderFormErrors("result", data);
-
-        if (data["result_text.text"]) {
-            var $el = $form.find("textarea[name=result\\[result_text_attributes\\]\\[text\\]]");
-
-            $el.closest(".form-group").addClass("has-error");
-            $el.parent().append("<span class='help-block'>" + data["result_text.text"] + "</span>");
+        var $el;
+        $form.renderFormErrors('result', data);
+        TinyMCE.highlight();
+        if (data['result_text.text']) {
+          $el = $form.find(
+            'textarea[name=result\\[result_text_attributes\\]\\[text\\]]'
+          );
+          $el.closest('.form-group').addClass('has-error');
+          $el.parent().append('<span class=\'help-block\'>'
+            + data['result_text.text'] + '</span>');
         }
+      });
+    }
+
+    publicAPI = Object.freeze({
+      initNewReslutText: initNewReslutText,
+      applyEditResultTextCallback: applyEditResultTextCallback
     });
-}
 
+    return publicAPI;
+  }());
 
-applyEditResultTextCallback();
+  ResultText.initNewReslutText();
+  ResultText.applyEditResultTextCallback();
+}());

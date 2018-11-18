@@ -1,24 +1,23 @@
-<% @markdown ||= nil %>
 <% results.each do |result| %>
   <h5>
     <% if result.is_text %>
-      <span class="glyphicon glyphicon-asterisk"></span>
+      <span class="fas fa-asterisk"></span>
     <% elsif result.is_table %>
-      <span class="glyphicon glyphicon-th"></span>
+      <span class="fas fa-table"></span>
     <% else %>
       <% if result.asset.is_image? %>
-        <span class="glyphicon glyphicon-picture"></span>
+        <span class="fas fa-paperclip"></span>
       <% else %>
-        <span class="glyphicon glyphicon-file"></span>
+        <span class="fas fa-paperclip"></span>
       <% end %>
     <% end %>
     <%= render partial: "search/results/partials/result_text.html.erb", locals: { result: result, query: search_query, target: nil } %>
   </h5>
 
-  <% if result.is_text && result.result_text.text.present? && !result.result_text.text.empty? && @markdown.present? %>
+  <% if result.is_text && result.result_text.text.present? && !result.result_text.text.empty? %>
     <blockquote class="search-asset-text-data">
       <p>
-        <%= highlight(@markdown.render(result.result_text.text).html_safe, search_query.strip.split(/\s+/)) %>
+        <%= highlight(sanitize_input(result.result_text.text), search_query.strip.split(/\s+/)) %>
       </p>
     </blockquote>
   <% end %>
@@ -44,13 +43,13 @@
     <span>
       <%=t "search.index.project" %>
       <%= render partial: "search/results/partials/project_text.html.erb",
-                 locals: { project: result.my_module.experiment.project } %>
+                 locals: { project: result.my_module.experiment.project, link_to_page: :show } %>
     </span>
     <br>
     <span>
-      <%=t "search.index.organization" %>
-      <%= render partial: "search/results/partials/organization_text.html.erb",
-                 locals: { organization: result.my_module.experiment.project.organization } %>
+      <%=t "search.index.team" %>
+      <%= render partial: "search/results/partials/team_text.html.erb",
+                 locals: { team: result.my_module.experiment.project.team } %>
     </span>
   </p>
 

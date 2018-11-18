@@ -1,24 +1,23 @@
 <div data-template="step" style="display: none;">
   <hr>
   <div class="badge-num">
-    <span class="badge-preview bg-primary size-digit-1">
+    <span class="badge-preview size-digit-1">
       <b data-val="position"></b>
     </span>
     &nbsp;
     &nbsp;
     <span class="step-panel-collapse-link" data-toggle="collapse">
-      <span class="glyphicon glyphicon-collapse-down collapse-step-icon"></span>
+      <span class="fas fa-caret-square-down collapse-step-icon"></span>
       <strong data-val="name"></strong>
     </span>
   </div>
   <br>
   <div class="tab-content">
     <div class="tab-pane active" role="tabpanel">
-      <span data-val="description"></span>
+      <div data-val="description" class="ql-editor"></div>
       <hr>
       <div class="row">
         <div data-toggle="tables" class="col-xs-12">
-          <strong><%= t("protocols.import_export.import_modal.tables_header") %></strong>
           <div data-hold="tables"></div>
         </div>
         <div data-toggle="assets" class="col-xs-12">
@@ -35,6 +34,9 @@
 </div>
 
 <div data-template="table" style="display: none;">
+  <div>
+    <strong data-val="name"></strong>
+  </div>
   <div data-hold="table"></div>
 </div>
 

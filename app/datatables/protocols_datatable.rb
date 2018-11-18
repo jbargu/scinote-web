@@ -1,21 +1,20 @@
-class ProtocolsDatatable < AjaxDatatablesRails::Base
+class ProtocolsDatatable < CustomDatatable
   # Needed for sanitize_sql_like method
   include ActiveRecord::Sanitization::ClassMethods
+  include InputSanitizeHelper
 
-  def_delegator :@view, :can_edit_protocol
+  def_delegator :@view, :can_read_protocol_in_repository?
+  def_delegator :@view, :can_manage_protocol_in_repository?
   def_delegator :@view, :edit_protocol_path
-  def_delegator :@view, :can_clone_protocol
+  def_delegator :@view, :can_restore_protocol_in_repository?
+  def_delegator :@view, :can_clone_protocol_in_repository?
   def_delegator :@view, :clone_protocol_path
-  def_delegator :@view, :can_make_protocol_private
-  def_delegator :@view, :can_publish_protocol
-  def_delegator :@view, :can_archive_protocol
-  def_delegator :@view, :can_restore_protocol
-  def_delegator :@view, :can_export_protocol
   def_delegator :@view, :linked_children_protocol_path
+  def_delegator :@view, :preview_protocol_path
 
-  def initialize(view, organization, type, user)
+  def initialize(view, team, type, user)
     super(view)
-    @organization = organization
+    @team = team
     # :public, :private or :archive
     @type = type
     @user = user
@@ -46,10 +45,10 @@ class ProtocolsDatatable < AjaxDatatablesRails::Base
   # See https://github.com/antillas21/ajax-datatables-rails/issues/112
   def as_json(options = {})
     {
-      :draw => params[:draw].to_i,
-      :recordsTotal =>  get_raw_records.length,
-      :recordsFiltered => filter_records(get_raw_records).length,
-      :data => data
+      draw: dt_params[:draw].to_i,
+      recordsTotal: get_raw_records.length,
+      recordsFiltered: filter_records(get_raw_records).length,
+      data: data
     }
   end
 
@@ -82,24 +81,34 @@ class ProtocolsDatatable < AjaxDatatablesRails::Base
     records.each do |record|
       protocol = Protocol.find(record.id)
       result_data << {
-        "DT_RowId": record.id,
-        "DT_CanEdit": can_edit_protocol(protocol),
-        "DT_EditUrl": can_edit_protocol(protocol) ?
-          edit_protocol_path(protocol, organization: @organization, type: @type) : nil,
-        "DT_CanClone": can_clone_protocol(protocol),
-        "DT_CloneUrl": can_clone_protocol(protocol) ?
-          clone_protocol_path(protocol, organization: @organization, type: @type) : nil,
-        "DT_CanMakePrivate": can_make_protocol_private(protocol),
-        "DT_CanPublish": can_publish_protocol(protocol),
-        "DT_CanArchive": can_archive_protocol(protocol),
-        "DT_CanRestore": can_restore_protocol(protocol),
-        "DT_CanExport": can_export_protocol(protocol),
-        "1": record.name,
-        "2": keywords_html(record),
-        "3": modules_html(record),
-        "4": record.full_username_str,
-        "5": timestamp_column_html(record),
-        "6": I18n.l(record.updated_at, format: :full)
+        'DT_RowId': record.id,
+        'DT_CanEdit': can_manage_protocol_in_repository?(protocol),
+        'DT_EditUrl': if can_manage_protocol_in_repository?(protocol)
+                        edit_protocol_path(protocol,
+                                           team: @team,
+                                           type: @type)
+                      end,
+        'DT_CanClone': can_clone_protocol_in_repository?(protocol),
+        'DT_CloneUrl': if can_clone_protocol_in_repository?(protocol)
+                         clone_protocol_path(protocol,
+                                             team: @team,
+                                             type: @type)
+                       end,
+        'DT_CanMakePrivate': can_manage_protocol_in_repository?(protocol),
+        'DT_CanPublish': can_manage_protocol_in_repository?(protocol),
+        'DT_CanArchive': can_manage_protocol_in_repository?(protocol),
+        'DT_CanRestore': can_restore_protocol_in_repository?(protocol),
+        'DT_CanExport': can_read_protocol_in_repository?(protocol),
+        '1': if protocol.in_repository_archived?
+               escape_input(record.name)
+             else
+               name_html(record)
+             end,
+        '2': keywords_html(record),
+        '3': modules_html(record),
+        '4': escape_input(record.full_username_str),
+        '5': timestamp_column_html(record),
+        '6': I18n.l(record.updated_at, format: :full)
       }
     end
     result_data
@@ -108,26 +117,29 @@ class ProtocolsDatatable < AjaxDatatablesRails::Base
   def get_raw_records_base
     records =
       Protocol
-      .where(organization: @organization)
+      .where(team: @team)
       .joins('LEFT OUTER JOIN "protocol_protocol_keywords" ON "protocol_protocol_keywords"."protocol_id" = "protocols"."id"')
       .joins('LEFT OUTER JOIN "protocol_keywords" ON "protocol_protocol_keywords"."protocol_keyword_id" = "protocol_keywords"."id"')
 
     if @type == :public
       records =
         records
-        .joins('LEFT OUTER JOIN "users" ON "users"."id" = "protocols"."added_by_id"')
-        .where("\"protocols\".\"protocol_type\" = #{Protocol.protocol_types[:in_repository_public]}")
+        .joins('LEFT OUTER JOIN users ON users.id = protocols.added_by_id')
+        .where('protocols.protocol_type = ?',
+               Protocol.protocol_types[:in_repository_public])
     elsif @type == :private
       records =
         records
-        .joins('LEFT OUTER JOIN "users" ON "users"."id" = "protocols"."added_by_id"')
-        .where("\"protocols\".\"protocol_type\" = #{Protocol.protocol_types[:in_repository_private]}")
+        .joins('LEFT OUTER JOIN users ON users.id = protocols.added_by_id')
+        .where('protocols.protocol_type = ?',
+               Protocol.protocol_types[:in_repository_private])
         .where(added_by: @user)
     else
       records =
         records
-        .joins('LEFT OUTER JOIN "users" ON "users"."id" = "protocols"."archived_by_id"')
-        .where("\"protocols\".\"protocol_type\" = #{Protocol.protocol_types[:in_repository_archived]}")
+        .joins('LEFT OUTER JOIN users ON users.id = protocols.archived_by_id')
+        .where('protocols.protocol_type = ?',
+               Protocol.protocol_types[:in_repository_archived])
         .where(added_by: @user)
     end
 
@@ -164,6 +176,13 @@ class ProtocolsDatatable < AjaxDatatablesRails::Base
     end
   end
 
+  def name_html(record)
+    "<a href='#' data-action='protocol-preview'" \
+      "data-url='#{preview_protocol_path(record)}'>" \
+      "#{escape_input(record.name)}" \
+      "</a>"
+  end
+
   def keywords_html(record)
     if !record.protocol_keywords_str || record.protocol_keywords_str.empty?
       "<i>#{I18n.t("protocols.no_keywords")}</i>"
@@ -171,17 +190,23 @@ class ProtocolsDatatable < AjaxDatatablesRails::Base
       kws = record.protocol_keywords_str.split(", ")
       res = []
       kws.sort_by{ |word| word.downcase }.each do |kw|
-        res << "<a href='#' data-action='filter' data-param='#{kw}'>#{kw}</a>"
+        sanitized_kw = sanitize_input(kw)
+        res << "<a href='#' data-action='filter' " \
+          "data-param='#{sanitized_kw}'>#{sanitized_kw}</a>"
       end
-      res.join(", ")
+      res.join(', ')
     end
   end
 
   def modules_html(record)
-    "<a href='#' data-action='load-linked-children'" +
-    " data-url='#{linked_children_protocol_path(record)}'>" +
-    "#{record.nr_of_linked_children}" +
-    "</a>"
+    "<a href='#' data-action='load-linked-children' class='help_tooltips' " \
+    "data-tooltiplink='" +
+      I18n.t('tooltips.link.protocol.num_linked') +
+      "' data-tooltipcontent='" +
+      I18n.t('tooltips.text.protocol.num_linked') +
+      "' data-url='#{linked_children_protocol_path(record)}'>" \
+      "#{record.nr_of_linked_children}"  \
+      "</a>"
   end
 
   def timestamp_column_html(record)
@@ -205,7 +230,7 @@ class ProtocolsDatatable < AjaxDatatablesRails::Base
   def build_conditions_for(query)
     # Inner query to retrieve list of protocol IDs where concatenated
     # protocol keywords string, or user's full_name contains searched query
-    search_val = params[:search][:value]
+    search_val = dt_params[:search][:value]
     records_having = get_raw_records_base.having(
       ::Arel::Nodes::NamedFunction.new(
         'CAST',

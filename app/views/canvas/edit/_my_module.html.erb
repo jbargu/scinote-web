@@ -2,14 +2,12 @@
   id="<%= my_module.id %>"
   data-module-id="<%= my_module.id %>"
   data-module-name="<%= my_module.name %>"
-  <% if my_module.my_module_group.present? %>
-  data-module-group-name="<%= my_module.my_module_group.name %>"
-  <% else %>
-  data-module-group-name=""
-  <% end %>
   data-module-x="<%= my_module.x %>"
   data-module-y="<%= my_module.y %>"
   data-module-conns="<%= construct_module_connections(my_module) %>">
+
+  <% module_group = my_module.my_module_group %>
+  <% can_manage_module_group = module_group && (module_group.new_record? || module_group.my_modules.all? { |my_module| can_manage_module?(my_module) }) %>
 
   <div class="panel-heading">
 
@@ -17,21 +15,16 @@
 
     <div class="dropdown pull-right module-options">
       <a class="dropdown-toggle" id="<%= my_module.id %>_options" data-toggle="dropdown" aria-haspopup="true" aria-expanded="true">
-        <span class="glyphicon glyphicon-triangle-bottom" aria-hidden="true"></span>
+        <span class="fas fa-caret-down" aria-hidden="true"></span>
       </a>
-      <ul class="dropdown-menu no-scale" aria-labelledby="<%= my_module.id %>_options">
+      <ul class="dropdown-menu custom-dropdown-menu no-scale" aria-labelledby="<%= my_module.id %>_options">
         <li class="dropdown-header"><%= t('projects.index.options_header') %></li>
-        <% if can_edit_module(my_module) %>
+        <% if can_manage_module?(my_module) %>
           <li>
               <a class="edit-module" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.edit_module" %></a>
           </li>
         <% end %>
-        <% if can_edit_module_groups(my_module.experiment) %>
-          <li <%= 'style=display:none;' if my_module.my_module_group.blank? %>>
-              <a class="edit-module-group" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.edit_module_group" %></a>
-          </li>
-        <% end %>
-        <% if can_clone_modules(my_module.experiment) %>
+        <% if can_manage_experiment?(my_module.experiment) %>
           <li>
             <a class ="clone-module" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.clone_module" %></a>
           </li>
@@ -39,21 +32,23 @@
             <a class ="clone-module-group" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.clone_module_group" %></a>
           </li>
         <% end %>
-        <% if can_move_modules(my_module.experiment) %>
+        <% if can_manage_module?(my_module) %>
           <li>
             <a class="move-module" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.move_module" %></a>
           </li>
-          <li <%= 'style=display:none;' if my_module.my_module_group.blank? %>>
+        <% end %>
+        <% if can_manage_module_group %>
+          <li>
             <a class="move-module-group" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.move_module_group" %></a>
           </li>
         <% end %>
-        <% if can_archive_module(my_module) %>
+        <% if can_manage_module?(my_module) %>
           <li>
             <a class="delete-module" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.delete_module" %></a>
           </li>
         <% end %>
-        <% if can_archive_modules(my_module.experiment) %>
-          <li <%= 'style=display:none;' if my_module.my_module_group.blank? %>>
+        <% if can_manage_module_group %>
+          <li data-hook="archive-module-group">
             <a class ="delete-module-group" href="" data-module-id="<%= my_module.id %>"><%=t "experiments.canvas.edit.delete_module_group" %></a>
           </li>
         <% end %>
@@ -62,7 +57,7 @@
 
   </div>
 
-  <% if can_edit_connections(my_module.experiment) %>
+  <% if can_manage_experiment?(my_module.experiment) %>
     <div class="panel-body ep">
       <%=t "experiments.canvas.edit.drag_connections" %>
     </div>
