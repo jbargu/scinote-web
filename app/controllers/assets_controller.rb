@@ -94,7 +94,7 @@ class AssetsController < ApplicationController
         'editable' =>  false,
         'type' => 'image',
         'mime-type' => @asset.preview.content_type,
-        'processing' => !@asset.preview.present?,
+        'processing' => !@asset.preview.exists?(:large),
         'large-preview-url' => @asset.preview.url(:large),
         'processing-img' => image_tag('medium/processing.gif')
       )
