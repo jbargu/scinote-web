@@ -1,11 +1,15 @@
-<% image_preview = asset.is_image? ? asset.url(:medium) : nil %>
+<% image_preview = asset.is_image? ? asset.file.url(:medium) : nil %>
 
 <div class="attachment-placeholder pull-left">
   <div class="attachment-thumbnail <%= image_preview ? '' : 'no-shadow' %>">
     <% if image_preview %>
       <%= image_tag image_preview %>
     <% else %>
-      <i class="fas <%= file_fa_icon_class(asset) if asset.file_file_name %>"></i>
+      <% if asset.preview.present? %>
+        <%= image_tag asset.preview.url %>
+      <% else %>
+        <i class="fas <%= file_fa_icon_class(asset) if asset.file_file_name %>"></i>
+      <% end %>
     <% end %>
   </div>
   <div class="attachment-label"><%= truncate(asset.file_file_name,

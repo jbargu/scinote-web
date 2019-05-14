@@ -61,6 +61,35 @@ Paperclip::Attachment.class_eval do
   def fetch
     Paperclip.io_adapters.for self
   end
+
+  def url(style = :original, timeout: Constants::URL_SHORT_EXPIRE_TIME)
+    if is_stored_on_s3?
+      presigned_url(style, timeout: timeout)
+    else
+      url(style)
+    end
+  end
+
+  # When using S3 file upload, we can limit file accessibility with url signing
+  def presigned_url(style = :original,
+                    download: false,
+                    timeout: Constants::URL_SHORT_EXPIRE_TIME)
+    if is_stored_on_s3?
+      if download
+        download_arg = 'attachment; filename=' + URI.escape(original_filename)
+      else
+        download_arg = nil
+      end
+
+      signer = Aws::S3::Presigner.new(client: S3_BUCKET.client)
+      signer.presigned_url(:get_object,
+        bucket: S3_BUCKET.name,
+        key: path(style)[1..-1],
+        expires_in: timeout,
+        # this response header forces object download
+        response_content_disposition: download_arg)
+    end
+  end
 end
 
 module Paperclip

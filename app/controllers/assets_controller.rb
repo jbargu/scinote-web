@@ -30,7 +30,7 @@ class AssetsController < ApplicationController
           # If check permission passes, return :ok
           render json: {
             'asset-id' => @asset.id,
-            'image-tag-url' => @asset.url(:medium),
+            'image-tag-url' => @asset.file.url(:medium),
             'preview-url' => asset_file_preview_path(@asset),
             'filename' => truncate(escape_input(@asset.file_file_name),
                                    length: Constants::FILENAME_TRUNCATION_LENGTH),
@@ -86,7 +86,7 @@ class AssetsController < ApplicationController
         'editable' =>  @asset.editable_image? && can_edit,
         'mime-type' => @asset.file.content_type,
         'processing' => @asset.file.processing?,
-        'large-preview-url' => @asset.url(:large),
+        'large-preview-url' => @asset.file.url(:large),
         'processing-img' => image_tag('medium/processing.gif')
       )
     else
@@ -141,7 +141,7 @@ class AssetsController < ApplicationController
     if !@asset.file_present
       render_404 and return
     elsif @asset.file.is_stored_on_s3?
-      redirect_to @asset.presigned_url(download: true), status: 307
+      redirect_to @asset.file.presigned_url(download: true), status: 307
     else
       send_file @asset.file.path, filename: URI.unescape(@asset.file_file_name),
         type: @asset.file_content_type
