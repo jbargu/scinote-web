@@ -10,7 +10,7 @@
 #
 # It's strongly recommended that you check this file into your version control system.
 
-ActiveRecord::Schema.define(version: 20190424113216) do
+ActiveRecord::Schema.define(version: 20190514080116) do
 
   # These are extensions that must be enabled in order to support this database
   enable_extension "plpgsql"
@@ -68,6 +68,10 @@ ActiveRecord::Schema.define(version: 20190424113216) do
     t.boolean "file_processing"
     t.integer "team_id"
     t.integer "file_image_quality"
+    t.string "preview_file_name"
+    t.string "preview_content_type"
+    t.integer "preview_file_size"
+    t.datetime "preview_updated_at"
     t.index "trim_html_tags((file_file_name)::text) gin_trgm_ops", name: "index_assets_on_file_file_name", using: :gin
     t.index ["created_at"], name: "index_assets_on_created_at"
     t.index ["created_by_id"], name: "index_assets_on_created_by_id"
@@ -1070,7 +1074,7 @@ ActiveRecord::Schema.define(version: 20190424113216) do
   add_foreign_key "wopi_apps", "wopi_discoveries"
   add_foreign_key "zip_exports", "users"
 
-  create_view "datatables_teams",  sql_definition: <<-SQL
+  create_view "datatables_teams", sql_definition: <<-SQL
       SELECT teams.id,
       teams.name,
       user_teams.role,
@@ -1086,5 +1090,4 @@ ActiveRecord::Schema.define(version: 20190424113216) do
      FROM (teams
        JOIN user_teams ON ((teams.id = user_teams.team_id)));
   SQL
-
 end

@@ -20,11 +20,14 @@ class Asset < ApplicationRecord
                       all: '-background "#d2d2d2" -flatten +matte'
                     }
 
+  has_attached_file :preview
+
   validates_attachment :file,
                        presence: true,
                        size: {
                          less_than: Rails.configuration.x.file_max_size_mb.megabytes
                        }
+
   validates :estimated_size, presence: true
   validates :file_present, inclusion: { in: [true, false] }
 
@@ -207,6 +210,12 @@ class Asset < ApplicationRecord
     end
   end
 
+  def previewable?
+    Constants::PREVIEWABLE_FILE_TYPES.any? do |v|
+      file_content_type.start_with? v
+    end
+  end
+
   # TODO: get the current_user
   # before_save do
   #   if current_user
@@ -223,6 +232,12 @@ class Asset < ApplicationRecord
     # Update self.empty
     self.update(file_present: true)
 
+    if previewable?
+      Rails.logger.info "Asset #{id}: Creating asset preview job"
+      #Asset.delay(queue: :generate_file_preview)
+      Asset.create_asset_preview(id)
+    end
+
     # Extract asset text if it's of correct type
     if text?
       Rails.logger.info "Asset #{id}: Creating extract text job"
@@ -233,6 +248,29 @@ class Asset < ApplicationRecord
     else
       # Update asset's estimated size immediately
       update_estimated_size(team)
+    end
+  end
+
+  def self.create_asset_preview(asset_id)
+    asset = find_by_id(asset_id)
+    return unless asset.present? && asset.file.present?
+
+    file_path = asset.file.path
+    if asset.file.is_stored_on_s3?
+      fa = asset.file.fetch
+      file_path = fa.path
+    end
+
+    service = CreateFilePreviewService.call(file_path)
+
+    if service.succeed?
+      asset.preview = File.open(service.output_file_path)
+      asset.save
+    else
+      Rails.logger.fatal(
+        "Asset #{asset.id}: Error creating asset preview from asset " \
+        "file #{asset.file.path}: #{service.errors}"
+      )
     end
   end
 
