@@ -20,7 +20,10 @@ class Asset < ApplicationRecord
                       all: '-background "#d2d2d2" -flatten +matte'
                     }
 
-  has_attached_file :preview
+  has_attached_file :preview,
+                    styles: {
+                      large: [Constants::LARGE_PIC_FORMAT, :jpg]
+                    }
 
   validates_attachment :file,
                        presence: true,
@@ -46,6 +49,9 @@ class Asset < ApplicationRecord
                                           {}
                                         end
                                       },
+                        processing_image_url: '/images/:style/processing.gif'
+
+  process_in_background :preview,
                         processing_image_url: '/images/:style/processing.gif'
 
   # Asset validation
@@ -266,6 +272,8 @@ class Asset < ApplicationRecord
     if service.succeed?
       asset.preview = File.open(service.output_file_path)
       asset.save
+
+      File.delete(service.output_file_path)
     else
       Rails.logger.fatal(
         "Asset #{asset.id}: Error creating asset preview from asset " \

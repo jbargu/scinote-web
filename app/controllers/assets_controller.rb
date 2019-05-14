@@ -89,6 +89,15 @@ class AssetsController < ApplicationController
         'large-preview-url' => @asset.file.url(:large),
         'processing-img' => image_tag('medium/processing.gif')
       )
+    elsif @asset.previewable?
+      response_json.merge!(
+        'editable' =>  false,
+        'type' => 'image',
+        'mime-type' => @asset.preview.content_type,
+        'processing' => !@asset.preview.present?,
+        'large-preview-url' => @asset.preview.url(:large),
+        'processing-img' => image_tag('medium/processing.gif')
+      )
     else
       response_json.merge!(
         'processing'   => @asset.file.processing?,
