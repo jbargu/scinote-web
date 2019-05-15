@@ -110,7 +110,7 @@ module ReportsHelper
       prefix = "http://#{prefix}"
     end
     size = type == :tiny_mce_asset ? :large : :medium
-    url = prefix + asset.file.url(size, timeout: Constants::URL_LONG_EXPIRE_TIME)
+    url = prefix + asset.file.get_url(size, timeout: Constants::URL_LONG_EXPIRE_TIME)
     image_tag(url, class: klass)
   end
 

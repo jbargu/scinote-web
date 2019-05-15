@@ -9,13 +9,13 @@ namespace :paperclip do
     model.all.each do |a|
       file = a.send file_attr
       styles = file.options[:styles]
-      url = file.url
+      url = file.get_url
 
       puts trim_url(url)
 
       if styles
         styles.each do |style, option|
-          url = file.url style
+          url = file.get_url style
           puts trim_url(url)
         end
       end

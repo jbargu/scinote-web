@@ -54,8 +54,6 @@ elsif ENV['PAPERCLIP_STORAGE'] == 'filesystem'
 end
 
 Paperclip::Attachment.class_eval do
-  alias :local_storage_url :url
-
   def is_stored_on_s3?
     options[:storage].to_sym == :s3
   end
@@ -64,11 +62,12 @@ Paperclip::Attachment.class_eval do
     Paperclip.io_adapters.for self
   end
 
-  def url(style = :original, timeout: Constants::URL_SHORT_EXPIRE_TIME)
+  # url method is already defined in the original class
+  def get_url(style = :original, timeout: Constants::URL_SHORT_EXPIRE_TIME)
     if is_stored_on_s3?
       presigned_url(style, timeout: timeout)
     else
-      local_storage_url(style)
+      url(style)
     end
   end
 

@@ -127,6 +127,8 @@ namespace :db do
       end
     rescue ActiveRecord::ActiveRecordError, ArgumentError, ActiveRecord::RecordNotSaved => e
       puts "Error creating user, transaction reverted: #{$!}"
+      puts e.message
+      e.backtrace.each { |line| puts line }
     end
   end
 end

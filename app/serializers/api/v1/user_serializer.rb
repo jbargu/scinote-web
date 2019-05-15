@@ -18,7 +18,7 @@ module Api
       end
 
       def avatar_url
-        object.avatar.url(:icon)
+        object.avatar.get_url(:icon)
       end
     end
   end

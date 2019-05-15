@@ -30,7 +30,7 @@ class AssetsController < ApplicationController
           # If check permission passes, return :ok
           render json: {
             'asset-id' => @asset.id,
-            'image-tag-url' => @asset.file.url(:medium),
+            'image-tag-url' => @asset.file.get_url(:medium),
             'preview-url' => asset_file_preview_path(@asset),
             'filename' => truncate(escape_input(@asset.file_file_name),
                                    length: Constants::FILENAME_TRUNCATION_LENGTH),
@@ -88,7 +88,7 @@ class AssetsController < ApplicationController
         'editable' =>  @asset.editable_image? && can_edit,
         'mime-type' => @asset.file.content_type,
         'processing' => @asset.file.processing?,
-        'large-preview-url' => @asset.file.url(:large),
+        'large-preview-url' => @asset.file.get_url(:large),
         'processing-img' => image_tag('medium/processing.gif')
       )
     elsif @asset.previewable? && !@asset.file.processing?
@@ -97,7 +97,7 @@ class AssetsController < ApplicationController
         'type' => 'image',
         'mime-type' => "image/png",
         'processing' => @asset.preview.processing?,
-        'large-preview-url' => @asset.preview.url(:large),
+        'large-preview-url' => @asset.preview.get_url(:large),
         'processing-img' => image_tag('medium/processing.gif')
       )
     else
