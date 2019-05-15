@@ -16,7 +16,7 @@ class CreateFilePreviewService
   end
 
   def call
-    directory = File.dirname(@input_file_path)
+    directory = Dir.tmpdir
     basename  = File.basename(@input_file_path, '.*')
     @output_file_path = File.join(directory, "#{basename}.png")
 
