@@ -22,7 +22,12 @@ class Asset < ApplicationRecord
 
   has_attached_file :preview,
                     styles: {
-                      large: [Constants::LARGE_PIC_FORMAT, :jpg]
+                      large: [Constants::LARGE_PIC_FORMAT, :jpg],
+                      medium: [Constants::MEDIUM_PIC_FORMAT, :jpg],
+                    },
+                    convert_options: {
+                      medium: '-quality 70 -strip',
+                      all: '-background "#d2d2d2" -flatten +matte'
                     }
 
   validates_attachment :file,
@@ -52,7 +57,8 @@ class Asset < ApplicationRecord
                         processing_image_url: '/images/:style/processing.gif'
 
   process_in_background :preview,
-                        processing_image_url: '/images/:style/processing.gif'
+                        processing_image_url: '/images/:style/processing.gif',
+                        queue: :generate_file_preview
 
   # Asset validation
   # This could cause some problems if you create empty asset and want to
@@ -246,10 +252,11 @@ class Asset < ApplicationRecord
     # Update self.empty
     self.update(file_present: true)
 
+    # Create asset preview if it is previewable
     if previewable?
       Rails.logger.info "Asset #{id}: Creating asset preview job"
-      #Asset.delay(queue: :generate_file_preview)
-      Asset.create_asset_preview(id)
+      Asset.delay(queue: :generate_file_preview)
+           .create_asset_preview(id)
     end
 
     # Extract asset text if it's of correct type
@@ -266,6 +273,7 @@ class Asset < ApplicationRecord
   end
 
   def self.create_asset_preview(asset_id)
+    # Obtain asset path
     asset = find_by_id(asset_id)
     return unless asset.present? && asset.file.present?
 
@@ -281,6 +289,7 @@ class Asset < ApplicationRecord
       asset.preview = File.open(service.output_file_path)
       asset.save
 
+      # Delete temp file after it is saved
       File.delete(service.output_file_path)
     else
       Rails.logger.fatal(
