@@ -72,6 +72,7 @@ ActiveRecord::Schema.define(version: 20190514080116) do
     t.string "preview_content_type"
     t.integer "preview_file_size"
     t.datetime "preview_updated_at"
+    t.boolean "preview_processing"
     t.index "trim_html_tags((file_file_name)::text) gin_trgm_ops", name: "index_assets_on_file_file_name", using: :gin
     t.index ["created_at"], name: "index_assets_on_created_at"
     t.index ["created_by_id"], name: "index_assets_on_created_by_id"
