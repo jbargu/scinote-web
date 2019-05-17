@@ -47,7 +47,7 @@ class AssetsController < ApplicationController
       format.json do
         if @asset.file.processing?
           render json: { processing: true }
-        elsif @asset.previewable? && @asset.preview.processing?
+        elsif @asset.previewable? && (@asset.preview.processing? || !@asset.preview.present?)
           render json: { processing: true }
         else
           render json: {
@@ -91,7 +91,9 @@ class AssetsController < ApplicationController
         'large-preview-url' => @asset.file.get_url(:large),
         'processing-img' => image_tag('medium/processing.gif')
       )
-    elsif @asset.previewable? && !@asset.file.processing?
+    elsif @asset.previewable? && !@asset.file.processing? &&
+          (@asset.preview.processing? ||
+          !@asset.preview.processing? && @asset.preview.exists?(:large))
       response_json.merge!(
         'editable' =>  false,
         'type' => 'image',
