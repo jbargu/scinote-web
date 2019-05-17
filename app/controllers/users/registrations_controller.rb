@@ -11,7 +11,7 @@ class Users::RegistrationsController < Devise::RegistrationsController
     style = params[:style] || "icon_small"
     # TODO: Maybe avatar should be an Asset, so it's methods could be used,
     # e.g. presigned_url in this case
-    redirect_to user.avatar.get_url(style.to_sym), status: 307
+    redirect_to user.avatar.url(style.to_sym), status: 307
   end
 
   # Validates asset and then generates S3 upload posts, because
