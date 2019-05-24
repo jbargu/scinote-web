@@ -97,7 +97,7 @@ class AssetsController < ApplicationController
       response_json.merge!(
         'editable' =>  false,
         'type' => 'image',
-        'mime-type' => "image/png",
+        'mime-type' => 'image/png',
         'processing' => @asset.preview.processing?,
         'large-preview-url' => @asset.preview.get_url(:large),
         'processing-img' => image_tag('medium/processing.gif')

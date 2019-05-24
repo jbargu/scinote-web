@@ -227,12 +227,19 @@ class Asset < ApplicationRecord
       file_content_type.start_with? v
     end
 
-    # Mimetype sometimes recognizes Office files as zip files
-    # In this case we also check the extension of the given file
-    # Otherwise the conversion should fail if the file is being something else
     extensions = %w(.xlsx .docx .pptx .xls .doc .ppt)
-    allowed_content_types ||= (file_content_type == 'application/zip' &&
+    allowed_content_types ||= begin
+      # Mimetype sometimes recognizes Office files as zip files
+      # In this case we also check the extension of the given file
+      # Otherwise the conversion should fail if the file is being something else
+      (file_content_type == 'application/zip' &&
                               extensions.include?(File.extname(file_file_name)))
+
+      # Mimetype also sometimes recognizes '.xls' and '.ppt' files as
+      # application/x-ole-storage (https://github.com/minad/mimemagic/issues/50)
+      (file_content_type == 'application/x-ole-storage' &&
+                                %w(.xls .ppt).include?(File.extname(file_file_name)))
+    end
     allowed_content_types
   end
 
