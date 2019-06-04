@@ -4,7 +4,7 @@ MAINTAINER BioSistemika <info@biosistemika.com>
 # additional dependecies
 
 # Add Debian stretch backports repository
-RUN echo 'deb http://http.debian.net/debian stretch-backports main' \
+RUN echo 'deb http://http.debian.net/debian $(lsb_release -sc)-backports main' \
   | tee /etc/apt/sources.list.d/stretch-backports.list
 
 # libSSL-1.0 is required by wkhtmltopdf binary
@@ -18,7 +18,7 @@ RUN curl -sL https://deb.nodesource.com/setup_8.x | bash - && \
   postgresql-client \
   default-jre-headless \
   unison && \
-  apt-get install -y -t stretch-backports libreoffice=1:6.1.5-3~bpo9+1 \
+  apt-get install -y -t stretch-backports libreoffice \
   sudo graphviz --no-install-recommends \
   libfile-mimeinfo-perl && \
   npm install -g yarn && \
