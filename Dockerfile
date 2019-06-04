@@ -3,9 +3,12 @@ MAINTAINER BioSistemika <info@biosistemika.com>
 
 # additional dependecies
 
+# Get version of Debian (lsb_release substitute) and save it to /tmp/lsb_release for further commands
+RUN cat /etc/os-release | grep -Po "VERSION=.*\(\K\w+" | tee /tmp/lsb_release
+
 # Add Debian stretch backports repository
-RUN echo 'deb http://http.debian.net/debian $(lsb_release -sc)-backports main' \
-  | tee /etc/apt/sources.list.d/stretch-backports.list
+RUN echo "deb http://http.debian.net/debian $(cat /tmp/lsb_release)-backports main" \
+  | tee /etc/apt/sources.list.d/$(cat /tmp/lsb_release)-backports.list
 
 # libSSL-1.0 is required by wkhtmltopdf binary
 # libreoffice for file preview generation
@@ -18,7 +21,7 @@ RUN curl -sL https://deb.nodesource.com/setup_8.x | bash - && \
   postgresql-client \
   default-jre-headless \
   unison && \
-  apt-get install -y -t stretch-backports libreoffice \
+  apt-get install -y -t $(cat /tmp/lsb_release)-backports libreoffice \
   sudo graphviz --no-install-recommends \
   libfile-mimeinfo-perl && \
   npm install -g yarn && \
