@@ -31,8 +31,11 @@ class CreateFilePreviewService
     Rails.logger.debug("Running: #{cmd.join(' ')}")
     stdout_and_stderr, status = Open3.capture2e(*cmd)
     Rails.logger.debug("Stdout/stderr message: #{stdout_and_stderr}, status: #{status}.")
+
     self
   rescue StandardError => e
+    File.delete(@output_file_path) if @output_file_path && File.exist?(@output_file_path)
+
     @errors[e.class.to_s.downcase.to_sym] = e.message
     self
   end
